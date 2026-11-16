@@ -1,0 +1,931 @@
+"""Gera imagens e vídeos no Google Flow (flow.google.com) controlando o Chrome por Playwright, sem o Claude
+clicar na tela passo a passo (um comando por geração, bem menos tokens). Serve a qualquer projeto: o pedido
+(prompt) e os arquivos vêm de quem chama; este script não conhece roteiro nem estilo.
+
+  python flow.py verificar                          # confere Python, Playwright, Chrome e login
+  python flow.py login [2|3]                        # abre o Chrome da conta; a pessoa entra uma vez e deixa aberto
+  python flow.py saldo                              # saldo de cada conta com login
+  python flow.py mapear [arquivo]                   # lista os botões da tela (para ajustar SELETORES se o Flow mudar)
+  python flow.py preferencias [--estilo natural] [--idioma pt-BR] [--musica depende] [--legendas sem] [--formato 9:16]
+  python flow.py imagem --prompt-arquivo p.txt --saida img.jpg [--ref a.jpg --ref b.jpg] [--formato 9:16]
+  python flow.py video  --prompt-arquivo p.txt [--imagem img.jpg] --saida clipe.mp4 --segundos 8 --confirmo [--max N]
+                        [--formato 9:16] [--resolucao 720p|360p] [--baixar 1080p]   # sem --imagem: so texto
+  python flow.py ampliar <link do vídeo no Flow> --saida clipe_1080p.mp4 --confirmo   # 1080p de um vídeo já gerado
+  python flow.py lote itens.json [--confirmo] [--max N]   # várias gerações; pula as que já existem
+
+Imagem: Nano Banana (sem gasto de crédito). Vídeo: gasta crédito, então exige --confirmo.
+Omni: até 10 s usa o Omni 1.1 Flash (8 s = 12 créditos, 10 s = 15). De 11 a 15 s usa o Omni 1.2 Flash (duração em barra;
+15 s = 60). FLOW_OMNI=1.2 força o 1.2 em tudo (o 1.1 sai do Flow em 5/12/2026).
+Resolução: 720p (padrão) ou 360p (mais barato, para teste). O custo do 360p não está na tabela: o script lê o preço
+que o próprio Flow mostra e só gera se couber no --max.
+A pessoa faz o login; o Claude nunca digita senha. Variáveis: FLOW_HOME (pasta de perfis), FLOW_CHROME, FLOW_CONTAS, FLOW_OMNI.
+"""
+import json
+import os
+import re
+from collections import Counter
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+
+URL = "https://flow.google.com"
+
+
+def _pasta_de_perfis():
+    """FLOW_HOME, ou ~/.config/flow (login, projeto e preferências)."""
+    if os.environ.get("FLOW_HOME"):
+        return Path(os.environ["FLOW_HOME"])
+    return Path.home() / ".config" / "flow"
+
+
+CONFIG = _pasta_de_perfis()
+
+
+def _ordem_das_contas():
+    """Ordem em que as contas são usadas: padrão 1, 2, 3. Para usar as contas grátis primeiro, crie
+    CONFIG/config.json com {"ordem": [2, 3, 1]}. Uma conta só (o normal) ignora isso."""
+    arq = CONFIG / "config.json"
+    if arq.exists():
+        try:
+            return tuple(int(x) for x in json.loads(arq.read_text(encoding="utf-8"))["ordem"])
+        except (ValueError, KeyError, TypeError):
+            sys.exit(f'{arq} inválido: esperado {{"ordem": [2, 3, 1]}}.')
+    return (1, 2, 3)
+
+
+CONTAS = _ordem_das_contas()
+ATUAL = 1
+
+
+def achar_chrome():
+    """Chrome do computador: FLOW_CHROME, caminhos comuns (Windows, macOS) ou o PATH (Linux)."""
+    if os.environ.get("FLOW_CHROME"):
+        return os.environ["FLOW_CHROME"]
+    comuns = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        str(Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "Application" / "chrome.exe"),
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ]
+    for c in comuns:
+        if Path(c).exists():
+            return c
+    for nome in ("google-chrome", "google-chrome-stable", "chromium", "chrome"):
+        achado = shutil.which(nome)
+        if achado:
+            return achado
+    sys.exit("Não achei o Chrome. Instale o Google Chrome ou defina FLOW_CHROME com o caminho dele.")
+
+
+def conta(n):
+    """Cada conta tem perfil de Chrome, porta e projeto próprios. A conta 1 mantém os nomes antigos."""
+    sufixo = "" if n == 1 else f"-{n}"
+    return {"perfil": CONFIG / f"flow-perfil{sufixo}", "porta": 9332 + n,
+            "projeto": CONFIG / f"flow-projeto{sufixo}.txt"}
+
+
+def contas_com_login():
+    """FLOW_CONTAS=1 (ou "1,3") limita às contas que a pessoa liberou no dia."""
+    import os
+    liberadas = [int(x) for x in os.environ.get("FLOW_CONTAS", "").split(",") if x.strip()]
+    return [n for n in (liberadas or CONTAS) if conta(n)["perfil"].exists()]
+# Créditos por clipe (x1, 720p), lidos no menu do Flow em 10 e 16/11/2026. Fora da tabela (outra duração ou 360p):
+# o script não chuta; lê o preço que o Flow mostra e exige um teto (--max) aprovado pela pessoa.
+CUSTO_OMNI = {
+    "1.1": {4: 7, 6: 10, 8: 12, 10: 15},
+    "1.2": {3: 9, 6: 18, 8: 24, 9: 27, 10: 30, 11: 36, 12: 42, 13: 48, 15: 60},
+}
+MODELOS_OMNI = {"1.1": "Omni 1.1 Flash", "1.2": "Omni 1.2 Flash"}
+ESPERA_GERACAO_MS = 8 * 60 * 1000
+
+# Nomes acessíveis dos controles (testados no Chrome em 08/10). Se o Google mudar a tela,
+# rode `mapear` e corrija só aqui.
+SELETORES = {
+    "novo_projeto": "Novo projeto",
+    "config": "Gatilho de configurações",
+    "gerar": "Iniciar geração",
+    "inicio": "Início",
+    "adicionar": "Menu para adicionar arquivos",
+    "enviar_midia": "Fazer upload de mídia",   # era "Enviar mídia" até nov/2026
+    "incluir": "Incluir no comando",
+    "apagar": "Apagar comando",
+    "elementos_add": "Adicionar elementos à caixa de comando",
+    "baixar": "Baixar mídia",
+    "original": "Tamanho original",
+    "avatar": "Detalhes da conta",
+    "menu_arquivos": "Menu para adicionar arquivos",
+    "aba_video": "Vídeo",
+    "aba_imagem": "Imagem",
+    "frames": "Frames",
+    "elementos": "Elementos",
+    "omni": "Omni 1.1 Flash",
+    "nano": "Nano Banana 2.1",
+    "formato": "9:16",
+    "resolucao": "720p",
+    "x1": "x1",
+}
+PROIBIDOS = ("Fazer upgrade", "Adicionar créditos")  # nunca clicar
+
+
+# ---------- regras (testadas) ----------
+
+def ler_saldo(texto):
+    m = re.search(r"([\d.]+)\s*créditos do Google Flow", texto or "")
+    return int(m.group(1).replace(".", "")) if m else None
+
+
+def modelo_omni(segundos):
+    """Até 10 s: Omni 1.1 (mais barato), como sempre. Acima de 10 s só o 1.2 tem. FLOW_OMNI=1.2 força o 1.2 em tudo."""
+    import os
+    if segundos > 10:
+        return "1.2"
+    return os.environ.get("FLOW_OMNI", "1.1")
+
+
+def custo_video(segundos, modelo=None):
+    modelo = modelo or modelo_omni(segundos)
+    tabela = CUSTO_OMNI[modelo]
+    if segundos not in tabela:
+        sys.exit(f"Não sei o custo de {segundos} s no Omni {modelo} (conhecidos: {sorted(tabela)}). Nada foi gasto.")
+    return tabela[segundos]
+
+
+def custo_conhecido(segundos, modelo=None, resolucao="720p"):
+    """Custo da tabela (só 720p) ou None quando o script não sabe: aí vale o preço do Flow, limitado pelo --max."""
+    if resolucao != "720p":
+        return None
+    return CUSTO_OMNI[modelo or modelo_omni(segundos)].get(segundos)
+
+
+RESOLUCOES = ("720p", "360p")
+
+
+def ler_custo_menu(texto):
+    m = re.search(r"vai usar\s*(\d+)\s*créditos", texto or "")
+    return int(m.group(1)) if m else None
+
+
+def conferir_custo_menu(mostrado, esperado, teto=None):
+    """Com custo conhecido, o Flow tem que mostrar exatamente ele. Sem custo conhecido, tem que caber no teto."""
+    if esperado is None:
+        if mostrado is None or teto is None or mostrado > teto:
+            sys.exit(f"O Flow mostra {mostrado} créditos e o teto combinado é {teto}. Nada foi gerado.")
+        return mostrado
+    if mostrado != esperado:
+        sys.exit(f"O Flow mostra {mostrado} créditos, o combinado era {esperado}. Nada foi gerado: confira x1 e a duração.")
+    return mostrado
+
+
+def opcoes_video(segundos, modo="elementos", formato="9:16", resolucao="720p"):
+    """Elementos: a imagem entra como única referência (o prompt diz isso). Frames só se for usar quadro final."""
+    SELETORES["formato"] = formato
+    SELETORES["resolucao"] = resolucao
+    modelo = modelo_omni(segundos)
+    SELETORES["omni"] = MODELOS_OMNI[modelo]
+    if modelo == "1.2":  # no 1.2 a duração é uma barra (3 a 15 s), não botões
+        return ["aba_video", modo, "formato", "omni", "resolucao", "duracao_barra", "x1"]
+    SELETORES["duracao"] = f"{segundos}s"
+    return ["aba_video", modo, "formato", "omni", "resolucao", "duracao", "x1"]
+
+
+def escolher_conta(saldos, custo):
+    """saldos: {conta: créditos ou None}. Primeira conta, na ordem, que paga a cena."""
+    for n, saldo in saldos.items():
+        if saldo is not None and saldo >= custo:
+            return n
+    return None
+
+
+def conferir_gasto(saldo, custo):
+    if saldo is None:
+        sys.exit("Não consegui ler o saldo do Flow. Nada foi gasto.")
+    if saldo < custo:
+        sys.exit(f"Saldo {saldo} créditos, a cena custa {custo}. Nada foi gasto: use a API do Veo ou espere renovar.")
+    return saldo - custo
+
+
+# ---------- navegador ----------
+
+def _chrome_aberto():
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{conta(ATUAL)['porta']}/json/version", timeout=2)
+        return True
+    except OSError:
+        return False
+
+
+def _abrir_chrome():
+    """Chrome comum, com perfil próprio. O Google não aceita login em navegador lançado pela automação,
+    então o script só se conecta a este Chrome depois que a pessoa entrou."""
+    if _chrome_aberto():
+        return
+    c = conta(ATUAL)
+    c["perfil"].mkdir(parents=True, exist_ok=True)
+    subprocess.Popen([achar_chrome(), f"--remote-debugging-port={c['porta']}", f"--user-data-dir={c['perfil']}",
+                      "--no-first-run", URL])
+    for _ in range(30):
+        if _chrome_aberto():
+            return
+        time.sleep(1)
+    sys.exit("O Chrome do Flow não abriu.")
+
+
+def _fechar_chrome_da_conta():
+    """Fecha só o Chrome desta conta (pelo perfil). O login fica salvo no perfil."""
+    perfil = str(conta(ATUAL)["perfil"]).replace("'", "")
+    if sys.platform != "win32":
+        subprocess.run(["pkill", "-f", perfil], capture_output=True)
+        time.sleep(3)
+        return
+    subprocess.run(["powershell", "-NoProfile", "-Command",
+                    "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
+                    f"Where-Object {{ $_.CommandLine -like '*{perfil}*' }} | "
+                    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"],
+                   capture_output=True)
+    time.sleep(3)
+
+
+def _abrir(p):
+    _abrir_chrome()
+    url = f"http://127.0.0.1:{conta(ATUAL)['porta']}"
+    try:
+        navegador = p.chromium.connect_over_cdp(url, timeout=20000)
+    except Exception:  # o Chrome da conta às vezes trava e não aceita mais controle: reinicia só ele
+        print(f"Conta {ATUAL}: Chrome travado, reiniciando.")
+        _fechar_chrome_da_conta()
+        _abrir_chrome()
+        navegador = p.chromium.connect_over_cdp(url, timeout=60000)
+    ctx = navegador.contexts[0]
+    pagina = ctx.new_page()
+    return pagina, pagina
+
+
+def _clicar(pg, chave, exato=False):
+    nome = SELETORES[chave]
+    if any(x in nome for x in PROIBIDOS):
+        raise RuntimeError(f"Botão proibido: {nome}")
+    for papel in ("radio", "menuitem", "option", "tab", "button"):
+        alvo = pg.get_by_role(papel, name=nome, exact=exato)
+        if alvo.count():
+            alvo.first.click()
+            return
+    pg.get_by_text(nome, exact=exato).first.click()
+
+
+def _fechar_paineis(pg):
+    """Fecha painéis do Flow (conta, menus, configuração). Esc primeiro; se não fechar, clica no fundo
+    ou, no menu de configuração (que não tem fundo), no próprio gatilho."""
+    for _ in range(4):
+        paineis = pg.locator(".cdk-overlay-pane")
+        if not any(paineis.nth(i).inner_text().strip() for i in range(paineis.count())):
+            return
+        pg.keyboard.press("Escape")
+        pg.wait_for_timeout(400)
+        fundo = pg.locator(".cdk-overlay-backdrop-showing")
+        if fundo.count():
+            fundo.last.click(force=True)
+        elif pg.locator(".cdk-overlay-container .credit-cost-label").count():
+            pg.get_by_role("button", name=SELETORES["config"]).first.click(force=True)
+        pg.wait_for_timeout(500)
+
+
+def _preparar(pg):
+    """Tela limpa: sem painel aberto, sem busca filtrando a grade, vendo todas as mídias, comando vazio."""
+    _fechar_paineis(pg)
+    limpar = pg.get_by_role("button", name="Limpar entrada da pesquisa")
+    if limpar.count() and limpar.first.is_visible():
+        limpar.first.click()
+        pg.wait_for_timeout(500)
+    pg.get_by_text("Todas as mídias", exact=True).first.click()
+    pg.wait_for_timeout(1000)
+    _apagar_comando(pg)
+
+
+def _ir_ao_projeto(pg):
+    arq = conta(ATUAL)["projeto"]
+    url = arq.read_text(encoding="utf-8").strip() if arq.exists() else ""
+    # ?hl=pt-BR: cada conta pode estar em outro idioma, e os SELETORES são em português
+    pg.goto((url or URL).split("?")[0] + "?hl=pt-BR")
+    # o Flow às vezes nunca fica "networkidle" (visto em 27/10): espera o load e segue
+    try:
+        pg.wait_for_load_state("networkidle", timeout=20000)
+    except Exception:
+        pg.wait_for_load_state("load")
+        pg.wait_for_timeout(5000)
+    if not url:
+        _clicar(pg, "novo_projeto")
+        pg.wait_for_url(re.compile(r".*/project/.*"), timeout=60000)
+        arq.parent.mkdir(parents=True, exist_ok=True)
+        arq.write_text(pg.url.split("?")[0], encoding="utf-8")
+    pg.wait_for_timeout(2000)
+    _preparar(pg)
+
+
+def _saldo(pg):
+    texto = pg.inner_text("body")
+    if ler_saldo(texto) is None:
+        _clicar(pg, "avatar")
+        pg.wait_for_timeout(1500)
+        texto = pg.inner_text("body")
+        _fechar_paineis(pg)
+    return ler_saldo(texto)
+
+
+def _modelo(pg, nome):
+    botao = pg.locator(".cdk-overlay-container button", has_text="arrow_drop_down").first
+    if nome in botao.inner_text():
+        return
+    botao.click()
+    pg.wait_for_timeout(800)
+    pg.locator(".cdk-overlay-container [role=menuitem], .cdk-overlay-container [role=option], .cdk-overlay-container button",
+               has_text=nome).last.click()
+    pg.wait_for_timeout(800)
+
+
+def _duracao_barra(pg, segundos):
+    """Omni 1.2: barra de 3 a 15 s com passo de 1. Home vai a 3 s e cada seta soma 1 s; confere o valor ao final."""
+    barra = pg.locator(".cdk-overlay-container").get_by_role("slider").first
+    barra.focus()
+    pg.keyboard.press("Home")
+    for _ in range(segundos - 3):
+        pg.keyboard.press("ArrowRight")
+    pg.wait_for_timeout(400)
+    if barra.input_value() != str(segundos - 3):  # o valor da barra é o passo (0 a 12); o rótulo mostra passo + 3
+        sys.exit(f"A barra de duração ficou no passo {barra.input_value()}, o combinado era {segundos} s. Nada foi gerado.")
+
+
+def _configurar(pg, opcoes, custo_esperado, segundos=None, teto=None):
+    """Marca cada opção e confere o custo que o próprio Flow mostra antes de fechar o menu."""
+    _fechar_paineis(pg)
+    _clicar(pg, "config")
+    pg.wait_for_timeout(800)
+    for chave in opcoes:
+        if chave in ("omni", "nano"):
+            _modelo(pg, SELETORES[chave])
+        elif chave == "duracao_barra":
+            _duracao_barra(pg, segundos)
+        else:
+            _clicar(pg, chave, exato=chave in ("x1", "duracao", "formato", "resolucao"))
+        pg.wait_for_timeout(400)
+    pg.wait_for_timeout(600)
+    mostrado = conferir_custo_menu(ler_custo_menu(pg.locator(".cdk-overlay-container").inner_text()), custo_esperado, teto)
+    _fechar_paineis(pg)
+    return mostrado
+
+
+def _apagar_comando(pg):
+    botao = pg.get_by_role("button", name=SELETORES["apagar"])
+    if botao.count() and botao.first.is_visible():
+        botao.first.click()
+        pg.wait_for_timeout(500)
+
+
+def _subir_imagem(pg, arquivo, limpar=True):
+    """Envia a imagem com nome único (cena + horário) e coloca no comando. Assim nunca pega uma imagem antiga."""
+    unico = Path(tempfile.gettempdir()) / f"{Path(arquivo).stem}_{time.strftime('%H%M%S')}{Path(arquivo).suffix}"
+    shutil.copy(arquivo, unico)
+    _fechar_paineis(pg)
+    if limpar:
+        _apagar_comando(pg)
+    pg.get_by_role("button", name=SELETORES["elementos_add"]).first.click(force=True)
+    pg.wait_for_timeout(1000)
+    with pg.expect_file_chooser() as fc:
+        pg.locator(".cdk-overlay-container").get_by_text(SELETORES["enviar_midia"]).first.click()
+    fc.value.set_files(str(unico))
+    pg.wait_for_timeout(2000)
+    if pg.get_by_text("Direitos de uso desta imagem").count():
+        sys.exit(f"Conta {ATUAL}: o Flow pede para a pessoa aceitar 'Direitos de uso desta imagem' (só na 1ª vez). "
+                 "Peça para ela clicar em Concordo na janela e rode de novo. Nada foi gerado.")
+    item = pg.locator(".cdk-overlay-container").get_by_text(unico.name, exact=True).first
+    item.wait_for(timeout=120000)
+    pg.wait_for_timeout(1500)
+    item.click()
+    pg.wait_for_timeout(1000)
+    pg.locator(".cdk-overlay-container").get_by_text(SELETORES["incluir"], exact=True).click()
+    pg.wait_for_timeout(1500)
+    _fechar_paineis(pg)
+    unico.unlink(missing_ok=True)
+
+
+def _escrever_comando(pg, texto):
+    """A caixa do comando é um editor ProseMirror (não é a busca do topo)."""
+    caixa = pg.locator(".ProseMirror[contenteditable=true]").last
+    caixa.click()
+    pg.keyboard.press("Control+A")
+    pg.keyboard.press("Delete")
+    pg.keyboard.insert_text(texto)
+    pg.wait_for_timeout(500)
+    if texto[:40] not in caixa.inner_text():
+        sys.exit("O texto não entrou na caixa do comando. Nada foi gerado.")
+
+
+JS_TILES = """t => [...document.querySelectorAll('flow-grid-tile-container')]
+    .filter(c => !!c.querySelector(t === 'video' ? 'flow-video-tile' : 'flow-image-tile'))
+    .map(c => {
+      const m = c.querySelector('video, source, img');
+      return {src: (m && (m.currentSrc || m.src)) || '', nome: c.getAttribute('aria-label') || ''};
+    }).filter(x => x.src)"""
+# Cada miniatura é um <flow-grid-tile-container aria-label="nome">, com <flow-video-tile> ou <flow-image-tile>.
+# O vídeo só vira <video> com o mouse em cima; antes é um <img> com o mesmo link (flow.google.com/asb/...),
+# que baixa o mp4 inteiro. Testado em 09/10.
+_ULTIMA_MIDIA = {"nome": None}
+ENVIADO = re.compile(r"\.(jpe?g|png|webp|mp4|mov)$", re.I)
+
+
+def baixado_ok(tipo, corpo, content_type):
+    """Recusa miniatura ou página no lugar da mídia: imagem original tem centenas de KB, vídeo mais ainda."""
+    minimo = 200_000 if tipo == "video" else 150_000
+    return (content_type or "").startswith(tipo) and len(corpo) >= minimo
+
+
+def contar(tiles):
+    """Quantas mídias de cada nome já existem (o link muda ao recarregar a página; o nome não)."""
+    return Counter(t["nome"] for t in tiles)
+
+
+def escolher_nova(antes, tiles):
+    """A mídia gerada agora: a primeira (a grade mostra as mais novas primeiro) de um nome que passou da
+    contagem de antes, ignorando arquivo enviado (nome de arquivo, ex. T1_135123.jpg)."""
+    agora = contar(tiles)
+    for t in tiles:
+        if agora[t["nome"]] > antes[t["nome"]] and not ENVIADO.search(t["nome"].strip()):
+            return t
+    return None
+
+
+def _link_da_midia(pg, tipo, nome):
+    """Link da mídia da miniatura. No vídeo, o <img> é só a capa: passa o mouse para o <video> aparecer."""
+    tile = pg.locator(f'flow-grid-tile-container[aria-label="{nome}"]').first
+    if tipo == "video":
+        tile.scroll_into_view_if_needed()
+        tile.hover()
+        pg.wait_for_timeout(2500)
+        sel = "video, source"
+    else:
+        sel = "img"
+    return tile.evaluate(f"c => {{ const m = c.querySelector('{sel}'); return m ? (m.currentSrc || m.src) : ''; }}")
+
+
+def _enviar_e_baixar(pg, prompt, tipo, destino):
+    """tipo: 'image' ou 'video'. Gera, espera aparecer a mídia gerada na grade e baixa pelo link direto
+    (já é o tamanho original), sem abrir menus."""
+    antes = contar(pg.evaluate(JS_TILES, tipo))
+    _escrever_comando(pg, prompt)
+    _clicar(pg, "gerar")
+    nova, voltas, limite = None, 0, time.time() + ESPERA_GERACAO_MS / 1000
+    while not nova:
+        if time.time() > limite:
+            sys.exit("A geração não apareceu na grade a tempo (falhou ou demorou). Confira no Flow antes de tentar de novo.")
+        pg.wait_for_timeout(5000)
+        voltas += 1
+        if voltas % 12 == 0:  # a grade nem sempre mostra o vídeo novo sem recarregar
+            pg.reload()
+            pg.wait_for_timeout(8000)
+        nova = escolher_nova(antes, pg.evaluate(JS_TILES, tipo))
+    corpo = b""
+    for tentativa in range(24):  # a mídia pode ainda estar processando (até ~3 min)
+        pg.wait_for_timeout(5000)
+        if tentativa and tentativa % 6 == 0:
+            pg.reload()
+            pg.wait_for_timeout(8000)
+        nova = escolher_nova(antes, pg.evaluate(JS_TILES, tipo)) or nova
+        link = _link_da_midia(pg, tipo, nova["nome"]) or nova["src"]
+        resposta = pg.request.get(link)
+        corpo = resposta.body() if resposta.ok else b""
+        if baixado_ok(tipo, corpo, resposta.headers.get("content-type")):
+            break
+    else:
+        sys.exit(f"A mídia nova ({nova['nome']}) não baixou inteira. Ela está no Flow: baixe à mão ou rode de novo.")
+    destino = Path(destino)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_bytes(corpo)
+    _ULTIMA_MIDIA["nome"] = nova["nome"]
+    print(f"Baixada: {nova['nome'] or 'sem nome'}")
+    return destino
+
+
+# ---------- preferências da pessoa (perguntas iniciais) ----------
+
+OPCOES_PREF = {
+    "estilo": None,    # texto livre: natural, institucional, produto, fundo-motion ou o nome de uma receita própria
+    "idioma": None,    # idioma da fala nos vídeos: pt-BR, en-US, es... ou "depende"
+    "musica": ("com", "sem", "depende"),
+    "legendas": ("com", "sem", "depende"),
+    "formato": ("9:16", "16:9", "1:1", "4:3", "3:4", "depende"),
+    "download": ("720p", "1080p", "depende"),  # 1080p = versão ampliada do Flow, cobrada à parte
+}
+
+# Baixar a versão ampliada em 1080p (menu "Baixar mídia" > "1080p Resolução ampliada"): 5 créditos por vídeo,
+# lido no Flow em 16/11/2026. 4K exige upgrade do plano e fica de fora (o robô nunca clica em upgrade).
+CUSTO_1080P = 5
+ESPERA_1080P_S = 12 * 60  # o Flow processa a ampliação (~1,5 min num vídeo de 15 s, testado em 16/11/2026)
+
+
+def ler_custo_1080p(texto):
+    m = re.search(r"(\d+)\s*créditos", texto or "")
+    return int(m.group(1)) if m else None
+
+
+def conferir_custo_1080p(mostrado):
+    if mostrado != CUSTO_1080P:
+        sys.exit(f"O Flow mostra {mostrado} créditos para o 1080p, o combinado era {CUSTO_1080P}. Nada foi gasto.")
+    return mostrado
+
+
+def saida_1080p(saida):
+    s = Path(saida)
+    return s.with_name(f"{s.stem}_1080p{s.suffix}")
+
+
+def achar_1080p_baixado(pasta, desde):
+    """O arquivo *_1080p.mp4 que chegou na pasta depois de `desde` (ignora o que ainda está baixando)."""
+    novos = [f for f in Path(pasta).glob("*_1080p.mp4") if f.stat().st_mtime >= desde]
+    return max(novos, key=lambda f: f.stat().st_mtime) if novos else None
+
+
+def _arq_pref():
+    return CONFIG / "preferencias.json"
+
+
+def ler_preferencias():
+    arq = _arq_pref()
+    if not arq.exists():
+        return {}
+    try:
+        return json.loads(arq.read_text(encoding="utf-8"))
+    except ValueError:
+        sys.exit(f"{arq} está corrompido: apague e responda as perguntas iniciais de novo.")
+
+
+def salvar_preferencias(novas):
+    for campo, valor in novas.items():
+        if campo not in OPCOES_PREF:
+            sys.exit(f"Preferência desconhecida: {campo}. Use {', '.join(OPCOES_PREF)}.")
+        validos = OPCOES_PREF[campo]
+        if validos and valor not in validos:
+            sys.exit(f"{campo}={valor} não vale. Opções: {', '.join(validos)}.")
+    prefs = {**ler_preferencias(), **novas}
+    _arq_pref().parent.mkdir(parents=True, exist_ok=True)
+    _arq_pref().write_text(json.dumps(prefs, ensure_ascii=False, indent=2), encoding="utf-8")
+    return prefs
+
+
+def formato_padrao(pedido):
+    """O formato pedido; sem pedido, o das preferências; se lá estiver "depende" ou vazio, 9:16."""
+    if pedido:
+        return pedido
+    f = ler_preferencias().get("formato")
+    return f if f and f != "depende" else "9:16"
+
+
+# ---------- comandos ----------
+
+def usar(n):
+    global ATUAL
+    ATUAL = n
+
+
+def login(n=1):
+    usar(n)
+    _abrir_chrome()
+    print("Entre na sua conta Google na janela do Chrome que abriu. Deixe a janela aberta.")
+
+
+def mapear(saida=None):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        ctx, pg = _abrir(p)
+        _ir_ao_projeto(pg)
+        nomes = pg.evaluate("""() => [...document.querySelectorAll('button,[role=button],[role=menuitem],[role=tab],[role=option]')]
+            .map(e => (e.getAttribute('aria-label') || e.innerText || '').trim().replace(/\\s+/g,' '))
+            .filter(Boolean)""")
+        nomes = sorted(set(nomes))
+        texto = "\n".join(nomes)
+        print(texto)
+        if saida:
+            Path(saida).write_text(texto, encoding="utf-8")
+        ctx.close()
+
+
+def _saldo_da_conta(p, n):
+    usar(n)
+    ctx, pg = _abrir(p)
+    _ir_ao_projeto(pg)
+    valor = _saldo(pg)
+    ctx.close()
+    return valor
+
+
+def saldo():
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        for n in contas_com_login():
+            print(f"Conta {n}: {_saldo_da_conta(p, n)} créditos")
+
+
+def _ler_prompt(prompt, arquivo):
+    if arquivo:
+        return Path(arquivo).read_text(encoding="utf-8").strip()
+    if prompt:
+        return prompt.strip()
+    sys.exit("Faltou o pedido: use --prompt ou --prompt-arquivo.")
+
+
+def gerar_imagem(prompt, saida, referencias=(), formato="9:16"):
+    """Imagem no Nano Banana (sem crédito). `referencias`: imagens que entram junto no comando (mesma pessoa, estilo...)."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        ctx, pg = _abrir(p)
+        _ir_ao_projeto(pg)
+        SELETORES["formato"] = formato
+        _configurar(pg, ["aba_imagem", "formato", "nano", "x1"], 0)
+        for i, arq in enumerate(referencias):
+            _subir_imagem(pg, arq, limpar=(i == 0))
+        destino = _enviar_e_baixar(pg, prompt, "image", saida)
+        ctx.close()
+    return destino
+
+
+def gerar_video(prompt, imagens, saida, segundos, confirmo, maximo=None, modo="elementos", formato="9:16",
+                resolucao="720p", baixar=None):
+    """Vídeo no Omni, modo Elementos (as imagens entram como referência; sem imagem, só o texto). Gasta crédito: exige `confirmo`.
+    Escolhe a primeira conta que paga e confere o custo que o Flow mostra antes de gerar."""
+    if not confirmo:
+        sys.exit("Gasto não confirmado. Rode de novo com --confirmo depois de a pessoa aprovar o custo.")
+    if modo == "frames":
+        sys.exit("O modo Frames não está no script: gere pelo Chrome (referencias/flow-navegador.md).")
+    if resolucao not in RESOLUCOES:
+        sys.exit(f"Resolução {resolucao} não existe no Flow para o Omni (só {', '.join(RESOLUCOES)}).")
+    custo = custo_conhecido(segundos, resolucao=resolucao)
+    if custo is None:
+        if maximo is None:
+            sys.exit(f"Não sei o custo de {segundos} s em {resolucao}: rode com --max N (teto aprovado pela pessoa); "
+                     "o script confere o preço que o Flow mostra antes de gerar. Nada foi gasto.")
+        para_saldo = maximo
+    else:
+        para_saldo = custo
+        if baixar == "1080p":
+            para_saldo += CUSTO_1080P
+        if maximo is not None and custo > maximo:
+            sys.exit(f"O clipe custa {custo}, acima do limite combinado ({maximo}). Nada foi gasto.")
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        saldos = {}
+        for n in contas_com_login():
+            saldos[n] = _saldo_da_conta(p, n)
+            if escolher_conta(saldos, para_saldo):
+                break
+        n = escolher_conta(saldos, para_saldo)
+        if n is None:
+            sys.exit(f"Nenhuma conta paga {para_saldo} créditos ({saldos}). Nada foi gasto: espere renovar ou use menos segundos.")
+        usar(n)
+        ctx, pg = _abrir(p)
+        _ir_ao_projeto(pg)
+        saldo_atual = _saldo(pg)
+        conferir_gasto(saldo_atual, para_saldo)
+        mostrado = _configurar(pg, opcoes_video(segundos, modo, formato, resolucao), custo, segundos, teto=maximo)
+        print(f"Conta {n}, {mostrado} créditos no Omni {modelo_omni(segundos)} ({resolucao}), sobram {saldo_atual - mostrado}")
+        if not imagens:
+            _apagar_comando(pg)
+        for i, arq in enumerate(imagens):
+            _subir_imagem(pg, arq, limpar=(i == 0))
+        destino = _enviar_e_baixar(pg, prompt, "video", saida)
+        if baixar == "1080p":
+            _ir_a_midia(pg, nome=_ULTIMA_MIDIA["nome"])
+            _baixar_1080p(pg, saida_1080p(saida))
+        ctx.close()
+    return destino
+
+
+# ---------- 1080p: menu "Baixar mídia" > "1080p Resolução ampliada" (cobrado à parte) ----------
+
+def _ir_a_midia(pg, url=None, nome=None):
+    """Abre a página do vídeo (…/edit/<id>): pelo link, ou clicando na miniatura pelo nome."""
+    if url:
+        pg.goto(url.split("?")[0] + "?hl=pt-BR")
+        pg.wait_for_load_state("load")
+    else:
+        pg.locator(f'flow-grid-tile-container[aria-label="{nome}"]').first.click()
+    pg.wait_for_url(re.compile(r".*/edit/.*"), timeout=60000)
+    pg.wait_for_timeout(4000)
+
+
+def _baixar_1080p(pg, destino):
+    """Confere o preço no menu, pede o 1080p e espera o arquivo: pelo evento de download do navegador ou,
+    se o Chrome salvar direto, pela pasta Downloads."""
+    baixados = []
+    pg.on("download", lambda d: baixados.append(d))
+    pg.get_by_role("button", name=SELETORES["baixar"]).first.click()
+    pg.wait_for_timeout(1500)
+    item = pg.get_by_role("menuitem", name=re.compile(r"^1080p")).first
+    if not item.count():
+        pg.keyboard.press("Escape")
+        sys.exit("O menu de download não tem a opção 1080p. Nada foi gasto.")
+    texto = item.inner_text()
+    if any(x in texto for x in PROIBIDOS):
+        pg.keyboard.press("Escape")
+        raise RuntimeError(f"Opção proibida: {texto}")
+    try:
+        conferir_custo_1080p(ler_custo_1080p(texto))
+    except SystemExit:
+        pg.keyboard.press("Escape")
+        raise
+    pasta = Path.home() / "Downloads"
+    inicio = time.time() - 2
+    item.click()
+    print(f"1080p pedido ({CUSTO_1080P} créditos). O Flow está ampliando; pode levar alguns minutos.")
+    limite = time.time() + ESPERA_1080P_S
+    destino = Path(destino)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    while time.time() < limite:
+        pg.wait_for_timeout(5000)
+        if baixados:
+            baixados[0].save_as(str(destino))
+            break
+        achado = achar_1080p_baixado(pasta, inicio)
+        if achado:
+            pg.wait_for_timeout(3000)  # termina de gravar
+            shutil.move(str(achado), str(destino))
+            break
+    else:
+        sys.exit("O 1080p não chegou a tempo. Os créditos podem ter sido usados: baixe à mão no Flow "
+                 "(vídeo > Baixar mídia > 1080p) antes de pedir de novo.")
+    if destino.stat().st_size < 500_000:
+        sys.exit(f"O arquivo 1080p ficou pequeno demais ({destino.stat().st_size} bytes). Confira no Flow.")
+    print(f"1080p salvo em {destino}")
+    return destino
+
+
+def ampliar(midia, saida, confirmo, maximo=None):
+    """1080p de um vídeo que já está no Flow (o link da página dele). Gasta crédito: exige `confirmo`."""
+    if not confirmo:
+        sys.exit("Gasto não confirmado. Rode de novo com --confirmo depois de a pessoa aprovar o custo.")
+    if maximo is not None and CUSTO_1080P > maximo:
+        sys.exit(f"O 1080p custa {CUSTO_1080P}, acima do limite combinado ({maximo}). Nada foi gasto.")
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        ctx, pg = _abrir(p)
+        _ir_ao_projeto(pg)
+        saldo_atual = _saldo(pg)
+        conferir_gasto(saldo_atual, CUSTO_1080P)
+        print(f"Conta {ATUAL}: {saldo_atual} créditos, o 1080p usa {CUSTO_1080P}.")
+        _ir_a_midia(pg, url=midia)
+        destino = _baixar_1080p(pg, saida)
+        ctx.close()
+    return destino
+
+
+def plano_do_lote(itens, base):
+    """Itens ainda não gerados (a saída não existe) e o custo em créditos dos vídeos."""
+    faltam = [i for i in itens if not (Path(base) / i["saida"]).exists()]
+    custo = 0
+    for i in faltam:
+        if i["tipo"] != "video":
+            continue
+        c = custo_conhecido(int(i["segundos"]), resolucao=i.get("resolucao", "720p"))
+        if c is None:
+            if i.get("max") is None:
+                sys.exit(f"{i['saida']}: custo desconhecido ({i['segundos']} s, {i.get('resolucao', '720p')}). "
+                         "Ponha 'max' no item (teto aprovado). Nada foi gasto.")
+            c = int(i["max"])
+        custo += c
+        if i.get("baixar") == "1080p":
+            custo += CUSTO_1080P
+    return faltam, custo
+
+
+def lote(arquivo, confirmo=False, maximo_total=None):
+    """Gera tudo o que está em `arquivo` (JSON: lista de {tipo, prompt, saida, imagem(ns), referencias, segundos, formato}).
+    Caminhos relativos são relativos à pasta do JSON. Pula o que já existe e para na primeira falha."""
+    arquivo = Path(arquivo)
+    base = arquivo.parent
+    faltam, custo = plano_do_lote(json.loads(arquivo.read_text(encoding="utf-8")), base)
+    if not faltam:
+        print("Nada para gerar: todas as saídas já existem.")
+        return
+    videos = [i for i in faltam if i["tipo"] == "video"]
+    print(f"{len(faltam)} itens ({len(videos)} vídeos, {custo} créditos no total).")
+    if videos:
+        if not confirmo:
+            sys.exit("Gasto não confirmado. Rode de novo com --confirmo depois de a pessoa aprovar o custo.")
+        if maximo_total is not None and custo > maximo_total:
+            sys.exit(f"O lote custa {custo}, acima do combinado ({maximo_total}). Nada foi gasto.")
+    feitos = []
+    for i in faltam:
+        nome = i["saida"]
+        try:
+            formato = formato_padrao(i.get("formato"))
+            if i["tipo"] == "imagem":
+                gerar_imagem(i["prompt"], base / nome, [base / r for r in i.get("referencias", [])], formato)
+            else:
+                imgs = i.get("imagens") or ([i["imagem"]] if i.get("imagem") else [])
+                gerar_video(i["prompt"], [base / x for x in imgs], base / nome, int(i["segundos"]), True,
+                            maximo=i.get("max"), formato=formato, resolucao=i.get("resolucao", "720p"),
+                            baixar=i.get("baixar"))
+            feitos.append(nome)
+        except SystemExit as e:
+            ficou = [x["saida"] for x in faltam if x["saida"] not in feitos]
+            sys.exit(f"Parou em {nome}: {e}. Prontos: {feitos or 'nenhum'}. Faltam: {ficou}.")
+    print(f"Lote pronto: {feitos}")
+
+
+def verificar():
+    """Confere o que a instalação precisa e diz o que falta, em linguagem simples."""
+    ok = True
+    try:
+        import playwright  # noqa: F401
+        print("OK  Playwright instalado.")
+    except ImportError:
+        ok = False
+        print("FALTA  Playwright. Instale com: pip install playwright (não precisa baixar navegador).")
+    try:
+        print(f"OK  Chrome: {achar_chrome()}")
+    except SystemExit as e:
+        ok = False
+        print(f"FALTA  {e}")
+    logadas = contas_com_login()
+    if logadas:
+        print(f"OK  Conta(s) com login salvo: {logadas}. Pasta: {CONFIG}")
+    else:
+        ok = False
+        print("FALTA  Login. Rode: python flow.py login (entre na sua conta Google na janela que abrir).")
+    sys.exit(0 if ok else 1)
+
+
+def _argumentos(argv):
+    import argparse
+    ap = argparse.ArgumentParser(prog="flow.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("verificar")
+    s = sub.add_parser("login")
+    s.add_argument("conta", nargs="?", type=int, default=1)
+    sub.add_parser("saldo")
+    s = sub.add_parser("mapear")
+    s.add_argument("arquivo", nargs="?")
+    for nome in ("imagem", "video"):
+        s = sub.add_parser(nome)
+        s.add_argument("--prompt")
+        s.add_argument("--prompt-arquivo")
+        s.add_argument("--saida", required=True)
+        s.add_argument("--formato")
+        if nome == "imagem":
+            s.add_argument("--ref", action="append", default=[])
+        else:
+            s.add_argument("--imagem", action="append", default=[])
+            s.add_argument("--resolucao", default="720p", choices=RESOLUCOES)
+            s.add_argument("--baixar", choices=("720p", "1080p"))
+            s.add_argument("--segundos", type=int, required=True)
+            s.add_argument("--confirmo", action="store_true")
+            s.add_argument("--max", type=int)
+            s.add_argument("--frames", action="store_true")
+    s = sub.add_parser("ampliar")
+    s.add_argument("midia")
+    s.add_argument("--saida", required=True)
+    s.add_argument("--confirmo", action="store_true")
+    s.add_argument("--max", type=int)
+    s = sub.add_parser("preferencias")
+    for campo in OPCOES_PREF:
+        s.add_argument(f"--{campo}")
+    s = sub.add_parser("lote")
+    s.add_argument("arquivo")
+    s.add_argument("--confirmo", action="store_true")
+    s.add_argument("--max", type=int)
+    return ap.parse_args(argv)
+
+
+def main(argv=None):
+    a = _argumentos(sys.argv[1:] if argv is None else argv)
+    if a.cmd == "verificar":
+        verificar()
+    elif a.cmd == "login":
+        login(a.conta)
+    elif a.cmd == "saldo":
+        saldo()
+    elif a.cmd == "mapear":
+        mapear(a.arquivo)
+    elif a.cmd == "preferencias":
+        novas = {c: getattr(a, c) for c in OPCOES_PREF if getattr(a, c)}
+        if novas:
+            salvar_preferencias(novas)
+        prefs = ler_preferencias()
+        print(json.dumps(prefs, ensure_ascii=False, indent=2) if prefs else
+              "Sem preferências salvas. Faça as perguntas iniciais (SKILL.md) e salve com: python flow.py preferencias --estilo ...")
+    elif a.cmd == "imagem":
+        print(f"Imagem salva em {gerar_imagem(_ler_prompt(a.prompt, a.prompt_arquivo), a.saida, a.ref, formato_padrao(a.formato))}")
+    elif a.cmd == "video":
+        destino = gerar_video(_ler_prompt(a.prompt, a.prompt_arquivo), a.imagem, a.saida, a.segundos, a.confirmo, a.max,
+                              "frames" if a.frames else "elementos", formato_padrao(a.formato), a.resolucao,
+                              a.baixar)
+        print(f"Clipe salvo em {destino}")
+    elif a.cmd == "ampliar":
+        ampliar(a.midia, a.saida, a.confirmo, a.max)
+    elif a.cmd == "lote":
+        lote(a.arquivo, a.confirmo, a.max)
+
+
+if __name__ == "__main__":
+    main()

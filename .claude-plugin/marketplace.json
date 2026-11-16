@@ -1,0 +1,32 @@
+{
+  "name": "claude-google-flow",
+  "owner": {
+    "name": "Wanessa Celys"
+  },
+  "metadata": {
+    "description": "Skill para o Claude Code gerar imagens e vídeos no Google Flow.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "google-flow",
+      "source": "./plugins/google-flow",
+      "description": "Gera imagens (Nano Banana) e vídeos (Omni) no Google Flow pelo seu próprio Chrome, com um comando por geração. Perguntas iniciais de preferência, receitas de prompt (natural/UGC, institucional, produto, fundos), modo projeto com storyboard e lote, download em 1080p, e sempre mostra o custo em créditos antes de gerar.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Wanessa Celys"
+      },
+      "license": "MIT",
+      "keywords": [
+        "google-flow",
+        "nano-banana",
+        "omni",
+        "veo",
+        "ai-video",
+        "ai-image",
+        "ugc"
+      ],
+      "category": "productivity"
+    }
+  ]
+}

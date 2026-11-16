@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.jpg
+*.png
+*.mp4
+!plugins/google-flow/.claude-plugin/icon.png
+preferencias.json
+config.json
+flow-perfil*/
+flow-projeto*.txt
+.DS_Store
+Thumbs.db
