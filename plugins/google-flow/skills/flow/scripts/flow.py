@@ -9,15 +9,15 @@ clicar na tela passo a passo (um comando por geração, bem menos tokens). Serve
   python flow.py preferencias [--estilo natural] [--idioma pt-BR] [--musica depende] [--legendas sem] [--formato 9:16]
   python flow.py imagem --prompt-arquivo p.txt --saida img.jpg [--ref a.jpg --ref b.jpg] [--formato 9:16]
   python flow.py video  --prompt-arquivo p.txt [--imagem img.jpg] --saida clipe.mp4 --segundos 8 --confirmo [--max N]
-                        [--formato 9:16] [--resolucao 720p|360p] [--baixar 1080p]   # sem --imagem: so texto
+                        [--formato 9:16] [--baixar 1080p]   # sem --imagem: so texto; gera sempre em 720p
   python flow.py ampliar <link do vídeo no Flow> --saida clipe_1080p.mp4 --confirmo   # 1080p de um vídeo já gerado
   python flow.py lote itens.json [--confirmo] [--max N]   # várias gerações; pula as que já existem
 
 Imagem: Nano Banana (sem gasto de crédito). Vídeo: gasta crédito, então exige --confirmo.
 Omni: até 10 s usa o Omni 1.1 Flash (8 s = 12 créditos, 10 s = 15). De 11 a 15 s usa o Omni 1.2 Flash (duração em barra;
 15 s = 60). FLOW_OMNI=1.2 força o 1.2 em tudo (o 1.1 sai do Flow em 5/12/2026).
-Resolução: 720p (padrão) ou 360p (mais barato, para teste). O custo do 360p não está na tabela: o script lê o preço
-que o próprio Flow mostra e só gera se couber no --max.
+Vídeo é gerado sempre em 720p (o tamanho original do Flow). 1080p é opcional, no download (--baixar 1080p, +5 créditos).
+Duração fora da tabela de custos: o script lê o preço que o próprio Flow mostra e só gera se couber no --max.
 A pessoa faz o login; o Claude nunca digita senha. Variáveis: FLOW_HOME (pasta de perfis), FLOW_CHROME, FLOW_CONTAS, FLOW_OMNI.
 """
 import json
@@ -93,7 +93,7 @@ def contas_com_login():
     import os
     liberadas = [int(x) for x in os.environ.get("FLOW_CONTAS", "").split(",") if x.strip()]
     return [n for n in (liberadas or CONTAS) if conta(n)["perfil"].exists()]
-# Créditos por clipe (x1, 720p), lidos no menu do Flow em 10 e 16/11/2026. Fora da tabela (outra duração ou 360p):
+# Créditos por clipe (x1, 720p), lidos no menu do Flow em 10 e 16/11/2026. Fora da tabela (outra duração):
 # o script não chuta; lê o preço que o Flow mostra e exige um teto (--max) aprovado pela pessoa.
 CUSTO_OMNI = {
     "1.1": {4: 7, 6: 10, 8: 12, 10: 15},
@@ -154,14 +154,9 @@ def custo_video(segundos, modelo=None):
     return tabela[segundos]
 
 
-def custo_conhecido(segundos, modelo=None, resolucao="720p"):
-    """Custo da tabela (só 720p) ou None quando o script não sabe: aí vale o preço do Flow, limitado pelo --max."""
-    if resolucao != "720p":
-        return None
+def custo_conhecido(segundos, modelo=None):
+    """Custo da tabela (720p) ou None quando o script não sabe: aí vale o preço do Flow, limitado pelo --max."""
     return CUSTO_OMNI[modelo or modelo_omni(segundos)].get(segundos)
-
-
-RESOLUCOES = ("720p", "360p")
 
 
 def ler_custo_menu(texto):
@@ -180,10 +175,11 @@ def conferir_custo_menu(mostrado, esperado, teto=None):
     return mostrado
 
 
-def opcoes_video(segundos, modo="elementos", formato="9:16", resolucao="720p"):
-    """Elementos: a imagem entra como única referência (o prompt diz isso). Frames só se for usar quadro final."""
+def opcoes_video(segundos, modo="elementos", formato="9:16"):
+    """Elementos: a imagem entra como única referência (o prompt diz isso). Frames só se for usar quadro final.
+    Resolução sempre 720p (tamanho original); 1080p é pedido no download."""
     SELETORES["formato"] = formato
-    SELETORES["resolucao"] = resolucao
+    SELETORES["resolucao"] = "720p"
     modelo = modelo_omni(segundos)
     SELETORES["omni"] = MODELOS_OMNI[modelo]
     if modelo == "1.2":  # no 1.2 a duração é uma barra (3 a 15 s), não botões
@@ -651,19 +647,17 @@ def gerar_imagem(prompt, saida, referencias=(), formato="9:16"):
 
 
 def gerar_video(prompt, imagens, saida, segundos, confirmo, maximo=None, modo="elementos", formato="9:16",
-                resolucao="720p", baixar=None):
+                baixar=None):
     """Vídeo no Omni, modo Elementos (as imagens entram como referência; sem imagem, só o texto). Gasta crédito: exige `confirmo`.
     Escolhe a primeira conta que paga e confere o custo que o Flow mostra antes de gerar."""
     if not confirmo:
         sys.exit("Gasto não confirmado. Rode de novo com --confirmo depois de a pessoa aprovar o custo.")
     if modo == "frames":
         sys.exit("O modo Frames não está no script: gere pelo Chrome (referencias/flow-navegador.md).")
-    if resolucao not in RESOLUCOES:
-        sys.exit(f"Resolução {resolucao} não existe no Flow para o Omni (só {', '.join(RESOLUCOES)}).")
-    custo = custo_conhecido(segundos, resolucao=resolucao)
+    custo = custo_conhecido(segundos)
     if custo is None:
         if maximo is None:
-            sys.exit(f"Não sei o custo de {segundos} s em {resolucao}: rode com --max N (teto aprovado pela pessoa); "
+            sys.exit(f"Não sei o custo de {segundos} s: rode com --max N (teto aprovado pela pessoa); "
                      "o script confere o preço que o Flow mostra antes de gerar. Nada foi gasto.")
         para_saldo = maximo
     else:
@@ -687,8 +681,8 @@ def gerar_video(prompt, imagens, saida, segundos, confirmo, maximo=None, modo="e
         _ir_ao_projeto(pg)
         saldo_atual = _saldo(pg)
         conferir_gasto(saldo_atual, para_saldo)
-        mostrado = _configurar(pg, opcoes_video(segundos, modo, formato, resolucao), custo, segundos, teto=maximo)
-        print(f"Conta {n}, {mostrado} créditos no Omni {modelo_omni(segundos)} ({resolucao}), sobram {saldo_atual - mostrado}")
+        mostrado = _configurar(pg, opcoes_video(segundos, modo, formato), custo, segundos, teto=maximo)
+        print(f"Conta {n}, {mostrado} créditos no Omni {modelo_omni(segundos)} (720p), sobram {saldo_atual - mostrado}")
         if not imagens:
             _apagar_comando(pg)
         for i, arq in enumerate(imagens):
@@ -786,10 +780,10 @@ def plano_do_lote(itens, base):
     for i in faltam:
         if i["tipo"] != "video":
             continue
-        c = custo_conhecido(int(i["segundos"]), resolucao=i.get("resolucao", "720p"))
+        c = custo_conhecido(int(i["segundos"]))
         if c is None:
             if i.get("max") is None:
-                sys.exit(f"{i['saida']}: custo desconhecido ({i['segundos']} s, {i.get('resolucao', '720p')}). "
+                sys.exit(f"{i['saida']}: custo desconhecido ({i['segundos']} s). "
                          "Ponha 'max' no item (teto aprovado). Nada foi gasto.")
             c = int(i["max"])
         custo += c
@@ -824,8 +818,7 @@ def lote(arquivo, confirmo=False, maximo_total=None):
             else:
                 imgs = i.get("imagens") or ([i["imagem"]] if i.get("imagem") else [])
                 gerar_video(i["prompt"], [base / x for x in imgs], base / nome, int(i["segundos"]), True,
-                            maximo=i.get("max"), formato=formato, resolucao=i.get("resolucao", "720p"),
-                            baixar=i.get("baixar"))
+                            maximo=i.get("max"), formato=formato, baixar=i.get("baixar"))
             feitos.append(nome)
         except SystemExit as e:
             ficou = [x["saida"] for x in faltam if x["saida"] not in feitos]
@@ -876,7 +869,6 @@ def _argumentos(argv):
             s.add_argument("--ref", action="append", default=[])
         else:
             s.add_argument("--imagem", action="append", default=[])
-            s.add_argument("--resolucao", default="720p", choices=RESOLUCOES)
             s.add_argument("--baixar", choices=("720p", "1080p"))
             s.add_argument("--segundos", type=int, required=True)
             s.add_argument("--confirmo", action="store_true")
@@ -918,8 +910,7 @@ def main(argv=None):
         print(f"Imagem salva em {gerar_imagem(_ler_prompt(a.prompt, a.prompt_arquivo), a.saida, a.ref, formato_padrao(a.formato))}")
     elif a.cmd == "video":
         destino = gerar_video(_ler_prompt(a.prompt, a.prompt_arquivo), a.imagem, a.saida, a.segundos, a.confirmo, a.max,
-                              "frames" if a.frames else "elementos", formato_padrao(a.formato), a.resolucao,
-                              a.baixar)
+                              "frames" if a.frames else "elementos", formato_padrao(a.formato), a.baixar)
         print(f"Clipe salvo em {destino}")
     elif a.cmd == "ampliar":
         ampliar(a.midia, a.saida, a.confirmo, a.max)

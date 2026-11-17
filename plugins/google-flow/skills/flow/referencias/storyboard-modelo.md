@@ -34,7 +34,6 @@ Monte sempre nesta ordem: **cabeçalho → tabela resumo → saldo → prompts e
 ## Quando o saldo não cobre tudo
 Diga quanto falta e dê as saídas, sem escolher pela pessoa:
 - gerar agora todas as imagens (de graça) e só os vídeos que o saldo paga, deixando o resto para quando os créditos renovarem;
-- testar os vídeos em 360p (cerca de metade do preço) e gerar em 720p só os aprovados;
 - encurtar cenas (4 s = 7 e 6 s = 10 créditos no Omni 1.1);
 - se a pessoa usa mais de uma conta, mostrar de qual conta sai cada vídeo.
 Nunca sugira comprar créditos nem clique em "Adicionar créditos".

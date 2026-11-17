@@ -10,7 +10,7 @@ Skill (plugin) para o **Claude Code** gerar imagens (**Nano Banana**) e vídeos 
 - **Perguntas no primeiro uso:** estilo, idioma da fala, música, legendas, formato, download em 1080p e uso de mais de uma conta. As respostas guiam todos os pedidos seguintes.
 - **Receitas de prompt:** natural (foto e vídeo de celular, UGC, depoimento), institucional, produto e fundos para motion. Se você já tem seus prompts, ela usa o seu texto exatamente como está.
 - **Modo projeto:** para pedidos com várias cenas, monta roteiro e storyboard com o custo, gera as imagens em lote (de graça), espera a sua aprovação e só então gera os vídeos.
-- **Download em 1080p** (opcional, cobrado à parte pelo Flow) e **vídeo de teste em 360p** (mais barato).
+- **Vídeos em 720p** (o tamanho original do Flow, recomendado) e, se você quiser, **download em 1080p** (opcional, cobrado à parte pelo Flow).
 
 ## Requisitos
 
@@ -65,8 +65,7 @@ Exemplos de pedidos:
 | Imagem (Nano Banana) | 0 |
 | Vídeo 4 s / 6 s / 8 s / 10 s (Omni 1.1, 720p) | 7 / 10 / 12 / 15 |
 | Vídeo 11 a 15 s (Omni 1.2, 720p) | 36 a 60 |
-| Vídeo em 360p | cerca de metade |
-| Download em 1080p | +5 por vídeo |
+| Download em 1080p (opcional; o recomendado é 720p) | +5 por vídeo |
 
 O Google muda esses valores. A skill confere o preço que o próprio Flow mostra antes de cada geração e para, sem gastar, se for diferente do combinado. **O Omni 1.1 sai do Flow em 5/12/2026**; depois disso os vídeos usam o Omni 1.2, que custa o dobro.
 

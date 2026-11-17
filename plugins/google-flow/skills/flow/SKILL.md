@@ -29,7 +29,7 @@ Faça nesta ordem, explicando cada passo em linguagem simples. **Todos os comand
 | Os vídeos gerados têm música? | Sem música (você põe na edição) · Com música · Depende do vídeo | `--musica sem` / `com` / `depende` |
 | Legenda escrita no vídeo? | Sem (recomendado: o gerador escreve errado; legenda se põe na edição) · Com · Depende | `--legendas sem` / `com` / `depende` |
 | Formato mais usado? | 9:16 (Reels, TikTok) · 16:9 (YouTube, site) · 1:1 · Depende | `--formato 9:16` / `16:9` / `1:1` / `depende` |
-| Baixar os vídeos em 1080p? | Não, 720p (grátis, o tamanho original) · Sim, 1080p (**+5 créditos por vídeo**) · Depende do vídeo | `--download 720p` / `1080p` / `depende` |
+| Baixar os vídeos em 1080p? | **Não, 720p (recomendado:** grátis, o tamanho original, ótimo para Reels, TikTok e anúncios) · Sim, 1080p (**+5 créditos por vídeo**) · Depende do vídeo | `--download 720p` / `1080p` / `depende` |
 | Tem mais de uma conta do Flow e quer que o robô use todas? | Não, só uma (recomendado) · Sim | se sim, siga `referencias/varias-contas.md` |
 
 ```bash
@@ -71,7 +71,6 @@ A montagem final (cortes, narração, legenda, música, motion) não faz parte d
 | Imagem (sem crédito) | `python flow.py imagem --prompt-arquivo p.txt --saida img.jpg [--ref outra.jpg] [--formato 9:16]` |
 | Vídeo a partir de imagem | `python flow.py video --prompt-arquivo p.txt --imagem img.jpg --saida clipe.mp4 --segundos 8 --confirmo` |
 | Vídeo só com texto | o mesmo, sem `--imagem` |
-| Vídeo de teste mais barato | acrescente `--resolucao 360p --max N` |
 | Vídeo + versão 1080p (+5 créditos) | acrescente `--baixar 1080p` |
 | 1080p de um vídeo já gerado (+5 créditos) | `python flow.py ampliar <link da página do vídeo no Flow> --saida clipe_1080p.mp4 --confirmo` |
 | Várias de uma vez | `python flow.py lote itens.json [--confirmo] [--max N]` |
@@ -80,8 +79,8 @@ A montagem final (cortes, narração, legenda, música, motion) não faz parte d
 - Use `--prompt-arquivo` para prompts longos (evita problema de aspas). `--ref` repete: várias imagens entram juntas (mesma pessoa, mesmo estilo).
 - **O Flow devolve JPEG:** dê nomes `.jpg` às imagens.
 - **Formatos:** imagem 16:9, 4:3, 1:1, 3:4, 9:16. Vídeo 16:9 e 9:16. Sem `--formato`, vale o das preferências (ou 9:16).
-- **Resolução do vídeo:** 720p (padrão) ou 360p. O Flow não tem 1080p para o Omni.
-- `lote`: JSON com uma lista de `{"tipo": "imagem"|"video", "prompt": "...", "saida": "...", "referencias": [...], "imagem": "...", "segundos": 8, "formato": "9:16", "resolucao": "720p", "baixar": "1080p", "max": N}`. Caminhos relativos à pasta do JSON. Pula o que já existe e para na primeira falha, dizendo o que ficou faltando.
+- **Resolução do vídeo:** gerado sempre em **720p**, o tamanho original do Flow e o recomendado. Se a pessoa quiser 1080p, ele é pedido no download (`--baixar 1080p`, +5 créditos por vídeo).
+- `lote`: JSON com uma lista de `{"tipo": "imagem"|"video", "prompt": "...", "saida": "...", "referencias": [...], "imagem": "...", "segundos": 8, "formato": "9:16", "baixar": "1080p", "max": N}`. Caminhos relativos à pasta do JSON. Pula o que já existe e para na primeira falha, dizendo o que ficou faltando.
 
 ## Modelos e créditos (lidos no Flow em 16/11/2026; o Google muda isso, confira com `saldo` e no menu)
 
@@ -99,7 +98,7 @@ Imagem: Nano Banana 2.1, sem crédito. Vídeo (720p, 1 cópia), escolhido pela d
 
 **Download em 1080p (opcional):** depois de gerado, o Flow oferece a versão ampliada em 1080p por **+5 créditos por vídeo** (o 720p é o tamanho original e não custa nada; 4K exige upgrade do plano). Some esses 5 créditos na tabela de custo sempre que a preferência for 1080p e passe `--baixar 1080p` no vídeo (ou `"baixar": "1080p"` no item do lote): o robô salva `clipe.mp4` (720p) e `clipe_1080p.mp4`. O robô **não** usa a preferência sozinho, para nenhum crédito sair fora da tabela. O Flow leva alguns minutos ampliando (~1,5 min num vídeo de 15 s). Pedir de novo o 1080p de um vídeo já ampliado não cobrou outra vez (16/11/2026).
 
-360p custa cerca de metade (10 s ≈ 7 créditos no 1.1); como esse preço não está na tabela, o robô lê o valor que o Flow mostra e só gera se couber no `--max`. **Teto seguro para o `--max`: o preço da mesma duração em 720p** (assim o teste nunca custa mais que o vídeo final). **O Omni 1.1 sai do Flow em 5/12/2026**; depois disso rode com `FLOW_OMNI=1.2` (o 1.2 custa o dobro nas mesmas durações).
+Duração fora da tabela: o robô lê o preço que o Flow mostra e só gera se couber no `--max` aprovado pela pessoa. **O Omni 1.1 sai do Flow em 5/12/2026**; depois disso rode com `FLOW_OMNI=1.2` (o 1.2 custa o dobro nas mesmas durações).
 
 ## Proteções (não tire)
 
@@ -130,4 +129,4 @@ O normal é uma conta só. Se a pessoa respondeu sim na pergunta inicial, ou ped
 
 ## Quando falhar
 
-O erro diz onde parou. Nada foi gasto se o erro vier antes de "Conta N, X créditos". Tela mudou: `mapear` e corrija só o dicionário `SELETORES` em `scripts/flow.py`. Urgente: `referencias/flow-navegador.md` (fazer pelo Chrome com o Claude, mais caro). Vídeo só com texto e 360p são recursos novos: se o robô parar nesses casos, avise a pessoa e ofereça o caminho testado (vídeo a partir de imagem, 720p).
+O erro diz onde parou. Nada foi gasto se o erro vier antes de "Conta N, X créditos". Tela mudou: `mapear` e corrija só o dicionário `SELETORES` em `scripts/flow.py`. Urgente: `referencias/flow-navegador.md` (fazer pelo Chrome com o Claude, mais caro). Vídeo só com texto é um recurso novo: se o robô parar nesses casos, avise a pessoa e ofereça o caminho testado (vídeo a partir de imagem, 720p).

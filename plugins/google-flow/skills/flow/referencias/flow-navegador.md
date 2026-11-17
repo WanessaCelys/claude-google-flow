@@ -12,7 +12,7 @@
 ## Pelo Chrome, passo a passo
 - Endereço: **https://flow.google.com** → "Novo projeto".
 - **Saldo:** avatar no canto superior direito → "N créditos do Google Flow". Nunca clique em "Fazer upgrade" nem "Adicionar créditos".
-- **Configuração:** botão ao lado da seta de enviar (mostra, por exemplo, "Vídeo · 720p · 10s · x1"). Ali: Imagem ou Vídeo; para vídeo, **Elementos** (a imagem como referência) ou **Frames** (quadro inicial e final); formato; modelo; 360p ou 720p; duração; **x1**. O menu mostra "A geração vai usar N créditos": confira com a pessoa antes de enviar.
+- **Configuração:** botão ao lado da seta de enviar (mostra, por exemplo, "Vídeo · 720p · 10s · x1"). Ali: Imagem ou Vídeo; para vídeo, **Elementos** (a imagem como referência) ou **Frames** (quadro inicial e final); formato; modelo; **720p**; duração; **x1**. O menu mostra "A geração vai usar N créditos": confira com a pessoa antes de enviar.
 - **Enviar imagem de referência:** "+" ao lado da caixa → "Fazer upload de mídia" → escolha o arquivo → clique nele na lista → "Incluir no comando".
 - **Escrever o pedido:** a caixa do comando (não a busca do topo). "Apagar comando" limpa.
 - **Gerar:** clique na seta ("Iniciar geração"). Enter às vezes só quebra a linha.

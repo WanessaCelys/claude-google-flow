@@ -106,22 +106,29 @@ def test_argumentos_do_video():
     assert (a.imagem, a.segundos, a.confirmo, a.formato) == (["a.jpg", "b.jpg"], 15, True, "16:9")
 
 
-# ---------- versão compartilhável: durações novas, 360p, vídeo só com texto, preferências ----------
+# ---------- versão compartilhável: durações novas, vídeo só com texto, preferências ----------
 
 def test_duracoes_curtas_do_omni_1_1(monkeypatch):
     monkeypatch.delenv("FLOW_OMNI", raising=False)
     assert (F.custo_video(4), F.custo_video(6)) == (7, 10)
 
 
-def test_custo_conhecido_depende_da_resolucao(monkeypatch):
+def test_custo_conhecido_so_da_tabela(monkeypatch):
     monkeypatch.delenv("FLOW_OMNI", raising=False)
-    assert F.custo_conhecido(10, resolucao="720p") == 15
-    assert F.custo_conhecido(10, resolucao="360p") is None  # não está na tabela: o Flow diz o preço e vale o --max
+    assert F.custo_conhecido(10) == 15
+    assert F.custo_conhecido(14) is None  # duração fora da tabela: o Flow diz o preço e vale o --max
+
+
+def test_video_sempre_em_720p(monkeypatch):
+    monkeypatch.delenv("FLOW_OMNI", raising=False)
+    F.opcoes_video(8)
+    assert F.SELETORES["resolucao"] == "720p"
+    assert not hasattr(F, "RESOLUCOES")
 
 
 def test_custo_desconhecido_exige_teto():
     with pytest.raises(SystemExit) as e:
-        F.gerar_video("p", [], "s.mp4", 10, confirmo=True, maximo=None, resolucao="360p")
+        F.gerar_video("p", [], "s.mp4", 14, confirmo=True, maximo=None)
     assert "--max" in str(e.value)
 
 
@@ -135,7 +142,9 @@ def test_conferir_custo_pelo_teto():
 
 def test_video_so_com_texto_nos_argumentos():
     a = F._argumentos(["video", "--prompt", "x", "--saida", "s.mp4", "--segundos", "8", "--confirmo"])
-    assert a.imagem == [] and a.resolucao == "720p"
+    assert a.imagem == []
+    with pytest.raises(SystemExit):  # não existe mais escolha de resolução na geração
+        F._argumentos(["video", "--prompt", "x", "--saida", "s.mp4", "--segundos", "8", "--resolucao", "360p"])
 
 
 def test_preferencias_salvar_e_ler(monkeypatch, tmp_path):
