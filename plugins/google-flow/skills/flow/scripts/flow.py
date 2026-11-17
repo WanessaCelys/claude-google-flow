@@ -10,7 +10,8 @@ clicar na tela passo a passo (um comando por geração, bem menos tokens). Serve
   python flow.py imagem --prompt-arquivo p.txt --saida img.jpg [--ref a.jpg --ref b.jpg] [--formato 9:16]
   python flow.py video  --prompt-arquivo p.txt [--imagem img.jpg] --saida clipe.mp4 --segundos 8 --confirmo [--max N]
                         [--formato 9:16] [--baixar 1080p]   # sem --imagem: so texto; gera sempre em 720p
-  python flow.py juntar cena01.mp4 cena02.mp4 --saida final.mp4 [--transicao suave] [--musica m.mp3]   # sem crédito
+  python flow.py juntar cena01.mp4@0-6 cena02.mp4 --saida final.mp4 [--transicao suave] [--musica m.mp3]   # sem crédito
+  python flow.py storyboard projeto.json [--itens imagens|videos] [--abrir]   # página para aprovar + itens do lote
   python flow.py fechar                             # fecha a janela do robô quando terminar (o login continua salvo)
   python flow.py ampliar <link do vídeo no Flow> --saida clipe_1080p.mp4 --confirmo   # 1080p de um vídeo já gerado
   python flow.py lote itens.json [--confirmo] [--max N]   # várias gerações; pula as que já existem
@@ -478,6 +479,28 @@ def contar(tiles):
     return Counter(t["nome"] for t in tiles)
 
 
+def midias_novas(antes, tiles):
+    """Todas as mídias que apareceram depois de `antes` (sem contar arquivos enviados), na ordem da grade."""
+    agora, vistos, novas = contar(tiles), set(), []
+    for t in tiles:
+        nome = t["nome"]
+        if nome in vistos or ENVIADO.search(nome.strip()):
+            continue
+        vistos.add(nome)
+        if agora[nome] > antes[nome]:
+            novas.append(nome)
+    return novas
+
+
+def conferir_marcador(pendente, destino):
+    """Marcador com várias candidatas (outra pessoa gerou no mesmo projeto ao mesmo tempo): não adivinha."""
+    if pendente and not pendente.get("nome"):
+        sys.exit("Esta mídia já foi gerada (crédito usado), mas apareceram outras ao mesmo tempo no projeto: "
+                 f"{', '.join(pendente.get('candidatos', []))}. Veja no Flow qual é a deste pedido, escreva o nome no "
+                 f"campo \"nome\" de {marcador(destino)} e rode de novo: o robô só baixa, sem gerar outra vez.")
+    return pendente
+
+
 def escolher_nova(antes, tiles):
     """A mídia gerada agora: a primeira (a grade mostra as mais novas primeiro) de um nome que passou da
     contagem de antes, ignorando arquivo enviado (nome de arquivo, ex. T1_135123.jpg)."""
@@ -547,7 +570,7 @@ def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
     """tipo: 'image' ou 'video'. Gera, espera aparecer a mídia gerada na grade e baixa o tamanho original.
     Logo que a mídia aparece, grava o marcador: se o download falhar, rodar de novo só baixa, sem gerar
     (e sem gastar) outra vez. `conferir_antes` roda depois de escrever o pedido e antes de clicar em gerar."""
-    pendente = ler_marcador(destino)
+    pendente = conferir_marcador(ler_marcador(destino), destino)
     if pendente:
         print(f"Já gerado antes ({pendente['nome']}): só baixando, sem gerar de novo.")
         _mostrar_tipo(pg, tipo)
@@ -570,6 +593,13 @@ def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
             pg.wait_for_timeout(8000)
         nova = escolher_nova(antes, pg.evaluate(JS_TILES, tipo))
     if not pendente:
+        pg.wait_for_timeout(5000)  # dá tempo de aparecer outra mídia nova (outra pessoa gerando no mesmo projeto)
+        candidatas = midias_novas(antes, pg.evaluate(JS_TILES, tipo))
+        if len(candidatas) > 1:
+            marcador(destino).parent.mkdir(parents=True, exist_ok=True)
+            marcador(destino).write_text(json.dumps({"nome": None, "candidatos": candidatas, "conta": ATUAL},
+                                                    ensure_ascii=False), encoding="utf-8")
+            conferir_marcador(ler_marcador(destino), destino)
         marcador(destino).parent.mkdir(parents=True, exist_ok=True)
         marcador(destino).write_text(json.dumps({"nome": nova["nome"], "conta": ATUAL}, ensure_ascii=False), encoding="utf-8")
     corpo = b""
@@ -730,6 +760,9 @@ def _ler_prompt(prompt, arquivo):
 def gerar_imagem(prompt, saida, referencias=(), formato="9:16"):
     """Imagem no Nano Banana (sem crédito). `referencias`: imagens que entram junto no comando (mesma pessoa, estilo...)."""
     _nao_sobrescrever(saida)
+    contas = contas_com_login()
+    if contas:  # imagem não gasta crédito: usa a primeira conta liberada (FLOW_CONTAS / ordem)
+        usar(contas[0])
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         ctx, pg = _abrir(p)
@@ -913,6 +946,32 @@ def ampliar(midia, saida, confirmo, maximo=None):
 
 TAMANHOS = {"9:16": (720, 1280), "16:9": (1280, 720), "1:1": (720, 720)}
 TRANSICAO_S = 0.4
+# nome em português -> efeito do ffmpeg (xfade); "corte" é corte seco
+TRANSICOES = {"corte": None, "suave": "fade", "deslizar": "slideleft", "circulo": "circleopen", "zoom": "zoomin"}
+
+
+def ler_trecho(entrada):
+    """"cena01.mp4@0-6" = só do segundo 0 ao 6 (para aproveitar a parte boa de um clipe). Sem @, o vídeo inteiro."""
+    m = re.match(r"^(.*)@([\d.]+)-([\d.]+)$", str(entrada))
+    if not m:
+        return str(entrada), None, None
+    inicio, fim = float(m.group(2)), float(m.group(3))
+    if fim <= inicio:
+        sys.exit(f"Trecho inválido em {entrada}: o fim tem que ser depois do início.")
+    return m.group(1), inicio, fim
+
+
+def lista_de_transicoes(transicao, n):
+    """Uma transição para todas as junções ("suave") ou uma por junção (["corte", "deslizar", ...] ou "corte,suave")."""
+    if isinstance(transicao, str):
+        transicao = transicao.split(",") if "," in transicao else [transicao] * (n - 1)
+    transicao = [t.strip() for t in transicao]
+    if len(transicao) != n - 1:
+        sys.exit(f"São {n} vídeos, então são {n - 1} junções: informe {n - 1} transições (ou uma só para todas).")
+    for t in transicao:
+        if t not in TRANSICOES:
+            sys.exit(f"Transição '{t}' não existe. Use: {', '.join(TRANSICOES)}.")
+    return transicao
 
 
 def achar_ffmpeg():
@@ -949,14 +1008,16 @@ def comando_juntar(ffmpeg, entradas, saida, duracoes, com_audio, transicao="cort
     ou transição suave; clipe sem som ganha silêncio; música opcional em loop, baixa, por baixo das falas."""
     if len(entradas) < 2:
         sys.exit("Para juntar são precisos pelo menos 2 vídeos.")
-    if transicao not in ("corte", "suave"):
-        sys.exit("Transição: use 'corte' ou 'suave'.")
+    transicoes = lista_de_transicoes(transicao, len(entradas))
     if formato not in TAMANHOS:
         sys.exit(f"Formato para juntar: {', '.join(TAMANHOS)}.")
     w, h = TAMANHOS[formato]
     cmd = [ffmpeg, "-hide_banner", "-y"]
     for e in entradas:
-        cmd += ["-i", str(e)]
+        arquivo, inicio, fim = ler_trecho(e)
+        if inicio is not None:
+            cmd += ["-ss", f"{inicio:g}", "-to", f"{fim:g}"]
+        cmd += ["-i", arquivo]
     if musica:
         cmd += ["-stream_loop", "-1", "-i", str(musica)]
     partes = []
@@ -968,16 +1029,23 @@ def comando_juntar(ffmpeg, entradas, saida, duracoes, com_audio, transicao="cort
         else:
             partes.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={d:g}[a{i}]")
     n = len(entradas)
-    if transicao == "corte":
+    if all(t == "corte" for t in transicoes):
         partes.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[v][a]")
     else:
-        v, a, acumulado = "[v0]", "[a0]", 0.0
+        v, a, acumulado = "[v0]", "[a0]", float(duracoes[0])
         for i in range(1, n):
-            acumulado += duracoes[i - 1] - TRANSICAO_S
             vo = "[v]" if i == n - 1 else f"[x{i}]"
             ao = "[a]" if i == n - 1 else f"[y{i}]"
-            partes.append(f"{v}[v{i}]xfade=transition=fade:duration={TRANSICAO_S}:offset={round(acumulado, 3):g}{vo}")
-            partes.append(f"{a}[a{i}]acrossfade=d={TRANSICAO_S}{ao}")
+            efeito = TRANSICOES[transicoes[i - 1]]
+            if efeito is None:
+                partes.append(f"{v}{a}[v{i}][a{i}]concat=n=2:v=1:a=1[c{i}]{ao}")
+                partes.append(f"[c{i}]settb=1/30{vo}")  # o concat muda a base de tempo; o xfade exige 1/30 dos dois lados
+                acumulado += duracoes[i]
+            else:
+                partes.append(f"{v}[v{i}]xfade=transition={efeito}:duration={TRANSICAO_S}:"
+                              f"offset={round(acumulado - TRANSICAO_S, 3):g}{vo}")
+                partes.append(f"{a}[a{i}]acrossfade=d={TRANSICAO_S}{ao}")
+                acumulado += duracoes[i] - TRANSICAO_S
             v, a = vo, ao
     saida_audio = "[a]"
     if musica:
@@ -993,21 +1061,160 @@ def comando_juntar(ffmpeg, entradas, saida, duracoes, com_audio, transicao="cort
 def juntar(entradas, saida, transicao="corte", musica=None, volume_musica=0.15, formato=None):
     """Une os clipes na ordem dada num único vídeo. Roda no computador da pessoa; não gasta crédito."""
     _nao_sobrescrever(saida)
-    for e in entradas + ([musica] if musica else []):
+    for e in [ler_trecho(x)[0] for x in entradas] + ([musica] if musica else []):
         if not Path(e).exists():
             sys.exit(f"Não achei {e}.")
     ffmpeg = achar_ffmpeg()
-    infos = [_info_do_video(ffmpeg, e) for e in entradas]
+    infos = []
+    for e in entradas:
+        arquivo, inicio, fim = ler_trecho(e)
+        duracao, audio = _info_do_video(ffmpeg, arquivo)
+        if inicio is not None:
+            if fim > duracao + 0.05:
+                sys.exit(f"{arquivo} tem {duracao:.1f} s; o trecho pedido vai até {fim:g} s.")
+            duracao = fim - inicio
+        infos.append((duracao, audio))
     cmd = comando_juntar(ffmpeg, entradas, saida, [d for d, _ in infos], [a for _, a in infos], transicao,
                          musica, volume_musica, formato_padrao(formato))
     Path(saida).parent.mkdir(parents=True, exist_ok=True)
     r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0 or not Path(saida).exists():
+        Path(saida).unlink(missing_ok=True)  # não deixa arquivo final quebrado
         ultima = (r.stderr or "erro desconhecido").strip().splitlines()[-1]
         sys.exit(f"O ffmpeg não conseguiu juntar: {ultima}")
-    total = sum(d for d, _ in infos) - (TRANSICAO_S * (len(entradas) - 1) if transicao == "suave" else 0)
+    total = sum(d for d, _ in infos) - TRANSICAO_S * sum(1 for t in lista_de_transicoes(transicao, len(entradas)) if t != "corte")
     print(f"Vídeo final: {saida} ({len(entradas)} clipes, {total:.1f} s)")
     return Path(saida)
+
+
+# ---------- storyboard (página visual para aprovar) e itens do lote, a partir de projeto.json ----------
+
+def _nome_cena(n, ext):
+    return f"cena{n:02d}.{ext}"
+
+
+def resumo_do_projeto(proj):
+    """Custos por cena (vídeo + 1080p), total, duração e quanto falta do saldo."""
+    cenas, total, duracao = [], 0, 0
+    for n, c in enumerate(proj["cenas"], 1):
+        seg = int(c.get("segundos", 0))
+        cred = 0
+        if c.get("prompt_video"):
+            base = custo_conhecido(seg) if seg else 0
+            if base is None:
+                if c.get("max") is None:
+                    sys.exit(f"Cena {n}: custo de {seg} s não está na tabela; ponha \"max\" (teto aprovado).")
+                base = int(c["max"])
+            cred = base + (CUSTO_1080P if c.get("baixar") == "1080p" else 0)
+        cenas.append({**c, "n": n, "creditos": cred, "imagem": _nome_cena(n, "jpg"), "video": _nome_cena(n, "mp4")})
+        total += cred
+        duracao += seg
+    saldo = proj.get("saldo")
+    falta = max(0, total - saldo) if saldo is not None else None
+    return {"cenas": cenas, "total": total, "duracao": duracao, "saldo": saldo, "falta": falta}
+
+
+def itens_do_projeto(proj, etapa):
+    """Itens do lote de uma etapa: "imagens" (0 crédito) ou "videos" (só depois das imagens aprovadas)."""
+    fmt = proj.get("formato", "9:16")
+    itens = []
+    for c in resumo_do_projeto(proj)["cenas"]:
+        if etapa == "imagens" and c.get("prompt_imagem"):
+            itens.append({"tipo": "imagem", "prompt": c["prompt_imagem"], "saida": c["imagem"],
+                          "referencias": list(c.get("referencias", [])), "formato": fmt})
+        elif etapa == "videos" and c.get("prompt_video"):
+            item = {"tipo": "video", "prompt": c["prompt_video"], "saida": c["video"], "segundos": int(c["segundos"]),
+                    "formato": fmt}
+            if c.get("prompt_imagem"):
+                if c.get("imagens_extra"):  # Omni (Elementos) aceita várias imagens: ex. personagem + outro ambiente
+                    item["imagens"] = [c["imagem"], *c["imagens_extra"]]
+                else:
+                    item["imagem"] = c["imagem"]
+            if c.get("baixar") == "1080p":
+                item["baixar"] = "1080p"
+            if c.get("max") is not None:
+                item["max"] = int(c["max"])
+            itens.append(item)
+    if etapa not in ("imagens", "videos"):
+        sys.exit("Etapa: imagens ou videos.")
+    return itens
+
+
+def html_storyboard(proj, pasta):
+    """Página do storyboard: cabeçalho, tabela resumo com créditos, aviso de saldo, cada cena com a imagem
+    (quando já existe), os prompts e a transição, e a pergunta da etapa."""
+    import html as H
+    e = lambda t: H.escape(str(t or ""))
+    r = resumo_do_projeto(proj)
+    pasta = Path(pasta)
+    tem_imagens = any((pasta / c["imagem"]).exists() for c in r["cenas"])
+    linhas = "".join(
+        f"<tr><td>{c['n']}</td><td>{e(c.get('descricao'))}</td><td class=num>{c.get('segundos', 0)} s</td>"
+        f"<td>{e(c['imagem'])}{' (ref. ' + e(', '.join(c.get('referencias', []))) + ')' if c.get('referencias') else ''}</td>"
+        f"<td>{e(c['video']) + ' · 720p' + (' + 1080p' if c.get('baixar') == '1080p' else '') if c.get('prompt_video') else '-'}</td>"
+        f"<td>{e(c.get('transicao', '') if c['n'] < len(r['cenas']) else 'fim')}</td>"
+        f"<td class=num>0 + {c['creditos']}</td></tr>" for c in r["cenas"])
+    blocos = []
+    for c in r["cenas"]:
+        img = (f'<img src="{e(c["imagem"])}" alt="cena {c["n"]}">' if (pasta / c["imagem"]).exists()
+               else '<div class=vazio>imagem ainda não gerada</div>')
+        fala = f'<p><b>Fala:</b> “{e(c["fala"])}”</p>' if c.get("fala") else ""
+        blocos.append(f"""<section class=cena><div class=quadro>{img}</div><div class=texto>
+<h2>Cena {c['n']} · {e(c.get('descricao'))} <small>{c.get('segundos', 0)} s · {c['creditos']} créditos</small></h2>{fala}
+<p><b>Transição para a próxima:</b> {e(c.get('transicao', '-') if c['n'] < len(r['cenas']) else 'fim do vídeo')}</p>
+<h3>Prompt da imagem</h3><pre>{e(c.get('prompt_imagem'))}</pre>
+<h3>Prompt do vídeo</h3><pre>{e(c.get('prompt_video'))}</pre></div></section>""")
+    if r["saldo"] is None:
+        saldo = ""
+    elif r["falta"]:
+        saldo = (f"<div class=aviso><b>Saldo: {r['saldo']} créditos. Faltam {r['falta']}.</b> Dá para gerar agora todas as "
+                 "imagens (0 créditos) e só os vídeos que o saldo paga, encurtar cenas, ou esperar os créditos renovarem.</div>")
+    else:
+        saldo = f"<div class=ok><b>Saldo: {r['saldo']} créditos → sobram {r['saldo'] - r['total']}.</b></div>"
+    n_img = len(r["cenas"])
+    pergunta = (f"Aprova as {n_img} imagens? Se sim, os vídeos custam {r['total']} créditos (mostro de novo antes de gerar)."
+                if tem_imagens else f"Posso gerar as {n_img} imagens (0 créditos)?")
+    prefs = " · ".join(e(proj.get(k)) for k in ("estilo", "idioma", "musica", "legendas") if proj.get(k))
+    return f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Storyboard · {e(proj.get('titulo'))}</title><style>
+:root{{--fundo:#f6f5f2;--cartao:#fff;--texto:#1f1d1a;--suave:#6b665e;--linha:#e3dfd7;--destaque:#b4531f}}
+body{{margin:0;background:var(--fundo);color:var(--texto);font:16px/1.55 system-ui,"Segoe UI",sans-serif}}
+main{{max-width:1000px;margin:0 auto;padding:32px 16px 64px}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
+table{{width:100%;border-collapse:collapse;background:var(--cartao);border:1px solid var(--linha)}}
+th,td{{text-align:left;padding:9px 11px;border-bottom:1px solid var(--linha);font-size:14px;vertical-align:top}}
+th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave)}}tr.t td{{font-weight:700}}.num{{white-space:nowrap}}
+.aviso{{margin:18px 0;padding:12px 14px;background:#fff4e5;border-left:4px solid #e8a33d;border-radius:6px}}
+.ok{{margin:18px 0;padding:12px 14px;background:#ecf8ef;border-left:4px solid #2f9e57;border-radius:6px}}
+.cena{{display:flex;gap:20px;background:var(--cartao);border:1px solid var(--linha);border-radius:10px;padding:16px;margin-top:20px}}
+.quadro{{flex:0 0 220px}}.quadro img{{width:220px;border-radius:8px;display:block}}
+.vazio{{width:220px;aspect-ratio:9/16;border:2px dashed var(--linha);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--suave);font-size:13px;text-align:center}}
+.texto{{flex:1;min-width:0}}h2{{font-size:17px;margin:0 0 6px}}h2 small{{color:var(--suave);font-weight:400}}
+h3{{font-size:12px;text-transform:uppercase;color:var(--suave);margin:12px 0 4px}}
+pre{{background:#f1efea;border:1px solid var(--linha);border-radius:8px;padding:10px;white-space:pre-wrap;font:12.5px/1.5 Consolas,monospace;margin:0}}
+.pergunta{{margin-top:28px;padding:16px;border:2px solid var(--destaque);border-radius:10px;font-weight:600;background:var(--cartao)}}
+@media(max-width:700px){{.cena{{flex-direction:column}}th:nth-child(4),td:nth-child(4){{display:none}}}}
+</style></head><body><main>
+<h1>Storyboard: {e(proj.get('titulo'))}</h1>
+<p class=sub>{e(proj.get('formato', '9:16'))} · {r['duracao']} s · {prefs} · download em {e(proj.get('download', '720p'))}</p>
+<table><thead><tr><th>#</th><th>Cena</th><th>Dur.</th><th>Imagem</th><th>Vídeo</th><th>Transição</th><th>Créditos</th></tr></thead>
+<tbody>{linhas}<tr class=t><td></td><td>Total</td><td class=num>{r['duracao']} s</td><td>{n_img} imagens: 0</td><td></td><td></td><td class=num>{r['total']}</td></tr></tbody></table>
+{saldo}{''.join(blocos)}<div class=pergunta>{e(pergunta)}</div></main></body></html>"""
+
+
+def storyboard(arquivo, etapa=None, abrir=False):
+    arquivo = Path(arquivo)
+    proj = json.loads(arquivo.read_text(encoding="utf-8"))
+    saida = arquivo.with_name("storyboard.html")
+    saida.write_text(html_storyboard(proj, arquivo.parent), encoding="utf-8")
+    print(f"Storyboard: {saida}")
+    if etapa:
+        itens = itens_do_projeto(proj, etapa)
+        destino = arquivo.with_name(f"itens_{etapa}.json")
+        destino.write_text(json.dumps(itens, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"Itens do lote ({etapa}): {destino}")
+    if abrir:
+        import webbrowser
+        webbrowser.open(saida.resolve().as_uri())
 
 
 TIPOS_DO_LOTE = ("imagem", "video")
@@ -1145,10 +1352,15 @@ def _argumentos(argv):
             s.add_argument("--max", type=int)
             s.add_argument("--frames", action="store_true")
     sub.add_parser("fechar")
+    s = sub.add_parser("storyboard")
+    s.add_argument("projeto")
+    s.add_argument("--itens", choices=("imagens", "videos"))
+    s.add_argument("--abrir", action="store_true")
     s = sub.add_parser("juntar")
     s.add_argument("entradas", nargs="+")
     s.add_argument("--saida", required=True)
-    s.add_argument("--transicao", choices=("corte", "suave"), default="corte")
+    s.add_argument("--transicao", default="corte",
+                   help="uma para todas (corte, suave, deslizar, circulo, zoom) ou uma por junção: corte,deslizar,suave")
     s.add_argument("--musica")
     s.add_argument("--volume-musica", type=float, default=0.15)
     s.add_argument("--formato")
@@ -1190,6 +1402,8 @@ def main(argv=None):
         destino = gerar_video(_ler_prompt(a.prompt, a.prompt_arquivo), a.imagem, a.saida, a.segundos, a.confirmo, a.max,
                               "frames" if a.frames else "elementos", formato_padrao(a.formato), a.baixar)
         print(f"Clipe salvo em {destino}")
+    elif a.cmd == "storyboard":
+        storyboard(a.projeto, a.itens, a.abrir)
     elif a.cmd == "juntar":
         juntar(a.entradas, a.saida, a.transicao, a.musica, a.volume_musica, a.formato)
     elif a.cmd == "fechar":

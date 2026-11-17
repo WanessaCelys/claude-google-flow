@@ -49,26 +49,27 @@ Para mudar depois: o mesmo comando só com o campo que muda. **Quando uma prefer
 
 ## Modo projeto (pedido com várias cenas)
 
-Quando o pedido tem várias cenas ou peças (um anúncio com cenas, uma leva de criativos, uma sequência de fotos), não gere uma por uma. Siga estas etapas, parando para a aprovação da pessoa onde está marcado. O motivo: imagem não gasta crédito e vídeo gasta, então tudo o que puder ser decidido na imagem é decidido antes de qualquer vídeo.
+Quando o pedido tem várias cenas ou peças (um comercial, uma leva de criativos, uma sequência de fotos), não gere uma por uma. Siga estas etapas, parando para a aprovação da pessoa onde está marcado. O motivo: imagem não gasta crédito e vídeo gasta, então tudo o que puder ser decidido na imagem é decidido antes de qualquer vídeo.
 
-1. **Roteiro:** lista de cenas, cada uma com o que acontece, a fala (se houver) e a duração. A soma das durações fecha o total pedido.
-2. **Storyboard → aprovação:** siga o modelo de `referencias/storyboard-modelo.md`: tabela resumo (cena, duração, arquivos, créditos e total), o saldo que sobra (e o que fazer se não cobrir tudo) e os prompts em blocos abaixo da tabela. Se a pessoa trouxe prompts prontos, eles entram como estão. Espere o ok.
-3. **Imagens em lote:** monte `<projeto>/itens.json` só com as imagens (nomes numerados: `cena01.jpg`, `cena02.jpg`…) e rode `flow.py lote`. A mesma pessoa em várias cenas: gere primeiro a cena em que ela aparece melhor, e use essa imagem como `referencias` nas outras.
-4. **Aprovação das imagens:** mostre cada imagem e confira mãos, rosto, objetos e texto. Refaça só as reprovadas (apague o arquivo e rode o lote de novo: ele pula as que já existem).
-5. **Vídeos em lote:** acrescente ao `itens.json` os vídeos das imagens aprovadas (`cena01.mp4`…). Mostre de novo a tabela de custo dos vídeos e só rode com `--confirmo` depois do ok.
-6. **Juntar (se a pessoa quiser um vídeo só):** ofereça unir os clipes na ordem do roteiro com `flow.py juntar` (veja abaixo). Não gasta crédito.
-7. **Entrega:** a pasta do projeto com os arquivos numerados na ordem do roteiro, o vídeo final (se juntou) e o `itens.json` (que guarda todos os prompts usados, para refazer ou ajustar depois).
+1. **Roteiro:** use **clipes de 10 s por padrão**: é o mais barato por segundo (15 créditos = 1,5/s; 4 s e 6 s custam 1,75 e 1,67/s) e o Omni entende direção. Dentro de cada clipe, dirija **várias ações em ordem, movimentos de câmera e mudanças de ângulo** (a câmera segue a pessoa, sobe até a placa, aproxima até o close), em vez de cortar em vários clipes curtos e parados. Um comercial de 30 s = 3 clipes de 10 s; os cortes e transições ficam entre eles. Clipe mais curto só se a pessoa pedir (ou para fechar um total que não é múltiplo de 10). Cada clipe tem a fala (até cerca de 46 palavras em 10 s) e a imagem de referência; quando o clipe passa por dois ambientes, ponha a imagem do segundo ambiente em `imagens_extra`. A soma fecha o total pedido. Use só frases e promessas que a marca já usa (site, fachada, embalagem); nada de preço ou promessa inventada. Fotos reais do lugar ou do produto entram como `referencias`.
+2. **Storyboard → aprovação (sempre, mesmo que a pessoa não peça):** escreva `<projeto>/projeto.json` (formato em `referencias/storyboard-modelo.md`) e rode `python flow.py storyboard <projeto>/projeto.json --itens imagens --abrir`. Isso cria e abre `storyboard.html` (tabela com créditos, aviso de saldo, cada cena com fala, prompts e transição) e o `itens_imagens.json` do lote. Mostre também o resumo na conversa e espere o ok.
+3. **Imagens em lote:** `python flow.py lote <projeto>/itens_imagens.json`. A cena em que a pessoa aparece melhor vem primeiro e serve de referência para as outras.
+4. **Aprovação das imagens:** rode o `storyboard` de novo (agora com as imagens aparecendo na página), confira mãos, rosto, objetos e texto e pergunte. Refaça só as reprovadas (apague o arquivo e rode o lote de novo: ele pula as que já existem).
+5. **Vídeos em lote:** `python flow.py storyboard <projeto>/projeto.json --itens videos` e `python flow.py lote <projeto>/itens_videos.json --confirmo --max <total aprovado>`, só depois de mostrar de novo o custo dos vídeos e receber o ok.
+6. **Juntar:** una os clipes na ordem do roteiro com as transições do storyboard (`flow.py juntar`, veja abaixo). Não gasta crédito.
+7. **Entrega:** a pasta do projeto com os arquivos numerados, o vídeo final, o `projeto.json` (todos os prompts, para refazer ou ajustar) e o `storyboard.html`.
 
-Narração, legenda e motion design não fazem parte desta skill.
+Narração em off, legenda e motion design não fazem parte desta skill.
 
 ## Juntar os vídeos (sem crédito)
 
 Une os clipes num vídeo só, no computador da pessoa (não usa o Flow). Todos ficam no mesmo tamanho (9:16 = 720×1280, 16:9 = 1280×720, 1:1) e a 30 quadros por segundo; clipe sem som ganha silêncio.
 
 ```bash
-python flow.py juntar cena01.mp4 cena02.mp4 cena03.mp4 --saida final.mp4 [--transicao corte|suave] [--musica fundo.mp3] [--volume-musica 0.15] [--formato 9:16]
+python flow.py juntar cena01.mp4 cena02.mp4 cena03.mp4 --saida final.mp4 [--transicao corte] [--musica fundo.mp3] [--volume-musica 0.15] [--formato 9:16]
 ```
-- Pergunte antes: **corte seco** (padrão, ritmo de anúncio) ou **transição suave** (0,4 s, sensação mais calma).
+- **Trecho de um clipe:** `cena01.mp4@0-6` usa só do segundo 0 ao 6 (aproveite a parte boa de um clipe em vez de gerar de novo).
+- **Transições:** `corte` (corte seco, padrão, ritmo de anúncio), `suave`, `deslizar`, `circulo` ou `zoom` (0,4 s cada). Uma para todas (`--transicao suave`) ou uma por junção, na ordem: `--transicao corte,deslizar,corte,suave` (são N−1 junções para N vídeos). No modo projeto, use as transições do storyboard.
 - **Música:** só se a pessoa mandar o arquivo; entra em loop, baixa (15%), por baixo das falas. Lembre que a música precisa ter licença para uso comercial se o vídeo for para cliente ou anúncio.
 - Precisa do ffmpeg: se faltar, instale com `pip install imageio-ffmpeg` (não precisa de mais nada).
 - Não sobrescreve: se o arquivo final já existe, escolha outro nome.
@@ -87,7 +88,8 @@ python flow.py juntar cena01.mp4 cena02.mp4 cena03.mp4 --saida final.mp4 [--tran
 | Vídeo + versão 1080p (+5 créditos) | acrescente `--baixar 1080p` |
 | 1080p de um vídeo já gerado (+5 créditos) | `python flow.py ampliar <link da página do vídeo no Flow> --saida clipe_1080p.mp4 --confirmo` |
 | Várias de uma vez | `python flow.py lote itens.json [--confirmo] [--max N]` |
-| Juntar os clipes num vídeo só (sem crédito) | `python flow.py juntar a.mp4 b.mp4 --saida final.mp4 [--transicao suave] [--musica m.mp3]` |
+| Storyboard visual + itens do lote (sem crédito) | `python flow.py storyboard projeto.json [--itens imagens\|videos] [--abrir]` |
+| Juntar os clipes num vídeo só (sem crédito) | `python flow.py juntar a.mp4 b.mp4 c.mp4 --saida final.mp4 [--transicao corte,suave]` |
 | Fechar a janela do robô no fim do trabalho | `python flow.py fechar` |
 | O Flow mudou a tela | `python flow.py mapear` |
 
@@ -144,4 +146,4 @@ O normal é uma conta só. Se a pessoa respondeu sim na pergunta inicial, ou ped
 
 ## Quando falhar
 
-O erro diz onde parou. Nada foi gasto se o erro vier antes de "Conta N, X créditos". **Gerou mas não baixou:** rode o mesmo comando de novo; o robô guarda um marcador (`<saida>.gerado.json`) e só baixa, sem gerar nem gastar outra vez. O robô não sobrescreve arquivo que já existe. Tela mudou: `mapear` e corrija **só os nomes de botões** do dicionário `SELETORES` em `scripts/flow.py`; nunca mexa em `PROIBIDOS`, nas conferências de custo nem no `--confirmo`, e mostre a mudança à pessoa antes de usar. Urgente: `referencias/flow-navegador.md` (fazer pelo Chrome com o Claude, mais caro). Vídeo só com texto é um recurso novo: se o robô parar nesses casos, avise a pessoa e ofereça o caminho testado (vídeo a partir de imagem, 720p).
+O erro diz onde parou. Nada foi gasto se o erro vier antes de "Conta N, X créditos". **Gerou mas não baixou:** rode o mesmo comando de novo; o robô guarda um marcador (`<saida>.gerado.json`) e só baixa, sem gerar nem gastar outra vez. **Duas mídias novas ao mesmo tempo** (outra pessoa ou outro robô gerando no mesmo projeto): o robô não adivinha; mostre as candidatas à pessoa, veja no Flow qual é a deste pedido, escreva o nome no campo `nome` do marcador e rode de novo. Para evitar, use um projeto do Flow só para o robô (o padrão: ele cria o dele). O robô não sobrescreve arquivo que já existe. Tela mudou: `mapear` e corrija **só os nomes de botões** do dicionário `SELETORES` em `scripts/flow.py`; nunca mexa em `PROIBIDOS`, nas conferências de custo nem no `--confirmo`, e mostre a mudança à pessoa antes de usar. Urgente: `referencias/flow-navegador.md` (fazer pelo Chrome com o Claude, mais caro). Vídeo só com texto é um recurso novo: se o robô parar nesses casos, avise a pessoa e ofereça o caminho testado (vídeo a partir de imagem, 720p).

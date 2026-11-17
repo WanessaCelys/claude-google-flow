@@ -28,7 +28,9 @@ Install: `/plugin install google-flow --marketplace WanessaCelys/claude-google-f
 - **Perguntas no primeiro uso:** estilo, idioma da fala, música, legendas, formato, download em 1080p e uso de mais de uma conta. As respostas guiam todos os pedidos seguintes.
 - **Receitas de prompt:** natural (foto e vídeo de celular, UGC, depoimento), institucional, produto e fundos para motion. Se você já tem seus prompts, ela usa o seu texto exatamente como está.
 - **Modo projeto:** para pedidos com várias cenas, monta roteiro e storyboard com o custo, gera as imagens em lote (de graça), espera a sua aprovação e só então gera os vídeos.
-- **Juntar os vídeos:** une as cenas num vídeo só, com corte seco ou transição suave e música de fundo opcional. Roda no seu computador e não gasta crédito.
+- **Storyboard visual:** em projetos com várias cenas, abre uma página com o roteiro, os prompts, as imagens e o custo de cada cena, para você aprovar antes de gastar.
+- **Clipes de 10 s dirigidos:** o mais barato por segundo; o Claude dirige várias ações e movimentos de câmera dentro de cada clipe.
+- **Juntar os vídeos:** une as cenas num vídeo só, com corte seco ou transições (suave, deslizar, círculo, zoom) em cada junção, aproveitando só o trecho bom de um clipe se precisar, e música de fundo opcional. Roda no seu computador e não gasta crédito.
 - **Vídeos em 720p** (o tamanho original do Flow, recomendado) e, se você quiser, **download em 1080p** (opcional, cobrado à parte pelo Flow).
 
 ## Requisitos

@@ -1,5 +1,19 @@
 # Histórico de versões
 
+## 1.2.0 (17/11/2026)
+
+**Novo**
+- `storyboard`: página visual do projeto (tabela com créditos, aviso de saldo, cada cena com fala, prompts, transição e a imagem quando já existe) e os itens do lote de cada etapa, a partir de um `projeto.json`. No modo projeto é gerado sempre, mesmo sem a pessoa pedir.
+- `juntar`: uma transição por junção (`corte,deslizar,suave`), novas transições (deslizar, círculo, zoom) e trecho de um clipe (`cena01.mp4@0-6`).
+- Clipes de 10 s por padrão, com várias ações e movimentos de câmera dirigidos dentro do clipe (mais barato por segundo).
+- Vídeo com mais de uma imagem de referência (`imagens_extra`), para o clipe que passa por dois ambientes.
+
+**Corrigido**
+- Imagem passa a usar a conta escolhida (antes, sempre a conta 1).
+- `juntar` com corte seguido de transição falhava (base de tempo); agora funciona, com teste que roda o ffmpeg de verdade. Em falha, não deixa arquivo final quebrado.
+- Duas mídias novas ao mesmo tempo no projeto (outra pessoa gerando): o robô para e pergunta qual é a sua, em vez de baixar a errada.
+- Receita natural: o Omni troca a marca do cliente pela marca famosa do mesmo tipo de objeto; agora o prompt trava a marca e proíbe logos de outras marcas, e cada vídeo é conferido antes de juntar.
+
 ## 1.1.0 (17/11/2026)
 
 **Novo**

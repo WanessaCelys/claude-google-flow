@@ -56,6 +56,10 @@ A imagem aprovada entra com `--imagem` e é a única referência. Prompt em port
    - música `sem`: "Sem música." · `com`: "Com uma música de fundo suave, baixa, que não cobre a fala."
    - formato: "Formato 9:16." (ou 16:9)
 
+**Marca do cliente no vídeo (importante):** o Omni completa objetos genéricos com a marca mais famosa daquele tipo. "Freezer vermelho e amarelo" virou freezer de sorvete de outra marca, mesmo com a imagem certa anexada. Descreva o objeto **pela marca e pela imagem**: "os freezers da <Marca> exatamente como na imagem anexada, com o logo <Marca> nas laterais", e feche com "sem logotipos de outras marcas, sem freezers ou embalagens de outras marcas". Produto sem embalagem conhecida: "pacote liso, sem marca".
+
+**Antes de juntar, confira cada vídeo quadro a quadro** (1 quadro por segundo): marca trocada, ambiente inventado, objeto que some. Se só uma parte do clipe ficou boa, aproveite o trecho no `juntar` (`clipe.mp4@0-6`) em vez de gerar de novo.
+
 **Truques que evitam erro:**
 - Objetos com nome completo: "latinha de refrigerante prateada, sem marca" (só "latinha" vira marca famosa).
 - Emoção explícita onde importa: "constrangida, sem sorrir".
@@ -63,6 +67,15 @@ A imagem aprovada entra com `--imagem` e é a única referência. Prompt em port
 - O que está na mesa ou na mão: "fica na mesa o vídeo todo". Objeto que passa de mão em mão some: deixe cada objeto com uma pessoa só.
 - Alguém ao fundo que acena ou sorri: "olhando para <pessoa>, de perfil para a câmera" (senão acena para a lente).
 - Mão mexendo na roupa por cima da barriga pode trocar o corpo da pessoa: evite e reforce "mesmo rosto e mesmo corpo do começo ao fim".
+
+## Clipe de 10 s dirigido (o padrão)
+
+Em vez de vários clipes curtos e parados, faça um clipe de 10 s com mais de um momento. Escreva as ações **em ordem**, cada uma com o movimento de câmera junto:
+"Ela se abana por causa do calor e diz: "…". Ela aponta para a placa; a câmera sobe acompanhando o dedo até a placa e volta. Ela entra pela porta; a câmera de mão vai atrás dela, revelando a loja da segunda imagem anexada; ela olha em volta, encantada."
+- Movimentos que o Omni entende: câmera acompanha a pessoa, aproxima até o close, se afasta revelando o lugar, sobe/desce, gira em volta, passa de um ângulo para outro.
+- Se o clipe passa por dois ambientes, anexe as duas imagens (personagem/ambiente 1 + ambiente 2) e diga no prompt qual é qual ("a primeira imagem é a fachada, a segunda é o interior").
+- Fala: até cerca de 46 palavras em 10 s, dividida entre os momentos.
+- A descrição de textura e o fecho (legenda, música, formato) continuam no fim.
 
 ## Vídeo só com texto (sem `--imagem`)
 

@@ -8,7 +8,7 @@
 - `python flow.py saldo` mostra o saldo de cada conta conectada.
 
 ## Como o robô escolhe a conta
-- **Imagem:** sempre a conta 1 (não gasta crédito).
+- **Imagem:** a primeira conta liberada (não gasta crédito); com `FLOW_CONTAS=3`, usa a conta 3.
 - **Vídeo:** lê o saldo das contas na ordem e usa a primeira que paga o clipe inteiro. Se nenhuma paga, para sem gastar.
 - Ordem padrão: 1, 2, 3. Para usar primeiro as contas grátis, crie `~/.config/flow/config.json` com `{"ordem": [2, 3, 1]}`.
 - Para limitar às contas liberadas no dia: variável `FLOW_CONTAS=1,3`.

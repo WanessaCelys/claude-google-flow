@@ -361,7 +361,7 @@ def test_juntar_recusa_pedido_invalido():
     with pytest.raises(SystemExit):
         F.comando_juntar("ffmpeg", ["a.mp4"], "f.mp4", duracoes=[8], com_audio=[True])
     with pytest.raises(SystemExit):
-        F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4"], "f.mp4", duracoes=[8, 8], com_audio=[True, True], transicao="zoom")
+        F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4"], "f.mp4", duracoes=[8, 8], com_audio=[True, True], transicao="explosao")
 
 
 def test_le_duracao_e_audio_do_ffmpeg():
@@ -369,3 +369,112 @@ def test_le_duracao_e_audio_do_ffmpeg():
              "  Stream #0:0[0x1](und): Video: h264\n  Stream #0:1[0x2](und): Audio: aac (LC), 48000 Hz, stereo\n")
     assert F.ler_info_ffmpeg(saida) == (8.04, True)
     assert F.ler_info_ffmpeg("  Duration: 00:01:02.50, start\n  Stream #0:0: Video: h264\n") == (62.5, False)
+
+
+# ---------- transição por junção e storyboard visual ----------
+
+def test_juntar_com_transicao_diferente_em_cada_juncao():
+    cmd = F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4", "c.mp4", "d.mp4"], "f.mp4", duracoes=[4, 6, 8, 6],
+                           com_audio=[True] * 4, transicao=["corte", "deslizar", "suave"])
+    filtro = cmd[cmd.index("-filter_complex") + 1]
+    assert "concat=n=2:v=1:a=1" in filtro                                   # a→b: corte seco (10 s juntos)
+    assert "settb=1/30" in filtro  # depois do corte, volta à régua de tempo de 30 q/s (senão o xfade seguinte falha)
+    assert "xfade=transition=slideleft:duration=0.4:offset=9.6" in filtro  # b→c: desliza no fim dos 10 s
+    assert "xfade=transition=fade:duration=0.4:offset=17.2" in filtro      # c→d: 10 + 8 - 0,4 - 0,4
+    with pytest.raises(SystemExit):  # tem que ter uma transição por junção
+        F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4", "c.mp4"], "f.mp4", duracoes=[4, 4, 4], com_audio=[True] * 3,
+                         transicao=["corte"])
+
+
+PROJETO = {
+    "titulo": "Teste", "formato": "9:16", "estilo": "natural", "idioma": "pt-BR", "musica": "sem", "legendas": "sem",
+    "download": "720p", "saldo": 20,
+    "cenas": [
+        {"descricao": "Ela chega", "fala": "Oi!", "segundos": 4, "prompt_imagem": "img1", "prompt_video": "vid1",
+         "referencias": ["ref/fachada.png"], "transicao": "corte"},
+        {"descricao": "Ela entra", "fala": "", "segundos": 8, "prompt_imagem": "img2", "prompt_video": "vid2",
+         "referencias": ["cena01.jpg"], "baixar": "1080p"},
+    ],
+}
+
+
+def test_storyboard_calcula_custos_e_avisa_saldo():
+    resumo = F.resumo_do_projeto(PROJETO)
+    assert [c["creditos"] for c in resumo["cenas"]] == [7, 17]  # 7 | 12 + 5 do 1080p
+    assert resumo["total"] == 24 and resumo["falta"] == 4 and resumo["duracao"] == 12
+
+
+def test_storyboard_html_tem_tabela_prompts_e_pergunta(tmp_path):
+    html = F.html_storyboard(PROJETO, tmp_path)
+    assert "Teste" in html and "img1" in html and "vid2" in html and "Faltam 4" in html
+    assert "imagem ainda não gerada" in html  # cena sem imagem ainda
+    (tmp_path / "cena01.jpg").write_bytes(b"x")
+    assert 'src="cena01.jpg"' in F.html_storyboard(PROJETO, tmp_path)
+
+
+def test_storyboard_gera_os_itens_do_lote_por_etapa():
+    imgs = F.itens_do_projeto(PROJETO, "imagens")
+    assert [i["saida"] for i in imgs] == ["cena01.jpg", "cena02.jpg"] and imgs[1]["referencias"] == ["cena01.jpg"]
+    vids = F.itens_do_projeto(PROJETO, "videos")
+    assert [(v["saida"], v["imagem"], v["segundos"]) for v in vids] == [("cena01.mp4", "cena01.jpg", 4), ("cena02.mp4", "cena02.jpg", 8)]
+    assert vids[1]["baixar"] == "1080p" and "baixar" not in vids[0]
+
+
+def test_imagem_usa_a_conta_escolhida(monkeypatch):
+    monkeypatch.setattr(F, "contas_com_login", lambda: [3, 1])
+    F.usar(1)
+    with pytest.raises(AssertionError):  # o teste para quando o robô tenta abrir o Chrome
+        F.gerar_imagem("p", "nao_existe_ainda.jpg")
+    assert F.ATUAL == 3
+
+
+def test_video_com_mais_de_uma_imagem_de_referencia():
+    proj = {"cenas": [{"segundos": 10, "prompt_imagem": "x", "prompt_video": "v", "imagens_extra": ["ref_loja.jpg"]}]}
+    v = F.itens_do_projeto(proj, "videos")[0]
+    assert v["imagens"] == ["cena01.jpg", "ref_loja.jpg"] and "imagem" not in v
+
+
+def test_juntar_usa_so_um_trecho_do_video():
+    assert F.ler_trecho("cena01.mp4@0-6") == ("cena01.mp4", 0.0, 6.0)
+    assert F.ler_trecho(r"C:\pasta\cena01.mp4") == (r"C:\pasta\cena01.mp4", None, None)
+    with pytest.raises(SystemExit):
+        F.ler_trecho("cena01.mp4@6-2")
+    cmd = F.comando_juntar("ffmpeg", ["a.mp4@0-6", "b.mp4"], "f.mp4", duracoes=[6, 8], com_audio=[True, True])
+    i = cmd.index("a.mp4")
+    assert cmd[i - 5:i] == ["-ss", "0", "-to", "6", "-i"] and cmd[cmd.index("b.mp4") - 1] == "-i"
+
+
+def test_juntar_de_verdade_com_corte_e_transicao(tmp_path):
+    """Roda o ffmpeg de verdade (sem Flow, sem crédito) com corte seco seguido de transição e um trecho."""
+    import subprocess
+    try:
+        ff = F.achar_ffmpeg()
+    except SystemExit:
+        pytest.skip("ffmpeg não instalado")
+    clipes = []
+    for i, cor in enumerate(("red", "green", "blue")):
+        c = tmp_path / f"c{i}.mp4"
+        subprocess.run([ff, "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c={cor}:s=360x640:d=1.5:r=24",
+                        "-f", "lavfi", "-i", "sine=frequency=440:duration=1.5", "-shortest", "-c:v", "libx264",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", str(c)], check=True)
+        clipes.append(str(c))
+    final = tmp_path / "final.mp4"
+    F.juntar([clipes[0] + "@0-1", clipes[1], clipes[2]], str(final), transicao="corte,deslizar", formato="9:16")
+    assert final.exists() and final.stat().st_size > 1000
+
+
+def test_duas_midias_novas_ao_mesmo_tempo_nao_adivinha():
+    from collections import Counter
+    antes = Counter({"Velha": 1})
+    tiles = [{"nome": "Couple discussing personal train…", "src": "a"}, {"nome": "Woman pointing at store sign", "src": "b"},
+             {"nome": "Velha", "src": "c"}, {"nome": "foto_123.jpg", "src": "d"}]
+    assert F.midias_novas(antes, tiles) == ["Couple discussing personal train…", "Woman pointing at store sign"]
+    assert F.midias_novas(antes, tiles[1:]) == ["Woman pointing at store sign"]
+
+
+def test_marcador_com_candidatos_pede_escolha(tmp_path):
+    saida = tmp_path / "v.mp4"
+    F.marcador(saida).write_text('{"nome": null, "candidatos": ["A", "B"], "conta": 3}', encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        F.conferir_marcador(F.ler_marcador(saida), saida)
+    assert "A" in str(e.value) and "B" in str(e.value) and "nome" in str(e.value)

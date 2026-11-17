@@ -1,35 +1,44 @@
-# Modelo de storyboard (modo projeto)
+# projeto.json e storyboard (modo projeto)
 
-Monte sempre nesta ordem: **cabeçalho → tabela resumo → saldo → prompts em blocos → pergunta**. Os prompts ficam fora da tabela porque são longos e deixariam a tabela ilegível; a tabela é para a pessoa ver o projeto e o custo de uma vez.
+O storyboard é sempre gerado no modo projeto, mesmo que a pessoa não peça: é onde ela vê o projeto inteiro e o custo antes de qualquer gasto. Ele sai do `projeto.json` pelo comando `flow.py storyboard`, igual para todo mundo, e gasta poucos tokens (o Claude escreve o JSON uma vez; a página é montada pelo robô).
 
-## Modelo
+## Formato do projeto.json
 
+```json
+{
+  "titulo": "Loja X · comercial 30 s",
+  "formato": "9:16",
+  "estilo": "natural (UGC)", "idioma": "pt-BR", "musica": "sem música", "legendas": "sem legendas", "download": "720p",
+  "saldo": 36,
+  "cenas": [
+    {
+      "descricao": "Gancho: o que acontece, em uma frase",
+      "segundos": 4,
+      "fala": "Frase dita na cena (ou vazio)",
+      "transicao": "corte",
+      "referencias": ["ref/fachada.png"],
+      "prompt_imagem": "prompt completo da imagem (receita do estilo)",
+      "prompt_video": "prompt completo do vídeo (receita do estilo)",
+      "imagens_extra": ["ref_loja.jpg"],
+      "baixar": "1080p"
+    }
+  ]
+}
 ```
-### Storyboard: "<nome do projeto>", <formato> · <duração total>
-<estilo> · fala em <idioma> · <com/sem> música · <com/sem> legendas · download em <720p/1080p>
+- As cenas viram `cena01.jpg`/`cena01.mp4`, `cena02…` na ordem. Referências são caminhos dentro da pasta do projeto (fotos reais em `ref/`, imagens de cenas anteriores pelo nome).
+- `transicao` é a passagem **para a próxima** cena: `corte`, `suave`, `deslizar`, `circulo` ou `zoom`. A última cena não precisa.
+- `saldo`: o resultado de `flow.py saldo` (com várias contas, a soma das contas que vão pagar).
+- `segundos`: **10 por padrão** (o mais barato por segundo; dirija várias ações e movimentos de câmera dentro do clipe). `imagens_extra`: imagens a mais para o vídeo (ex.: o segundo ambiente que o clipe atravessa).
+- `baixar: "1080p"` só se a pessoa pediu (+5 créditos); `max` só para duração fora da tabela.
+- Cena só de imagem: deixe `prompt_video` vazio. Vídeo só com texto: deixe `prompt_imagem` vazio.
 
-| # | Cena | Dur. | Imagem | Vídeo | Créditos |
-|---|---|---|---|---|---|
-| 1 | <o que acontece, em uma frase> | 8 s | cena01.jpg | cena01.mp4 · 720p | 0 + 12 |
-| 2 | <…> | 8 s | cena02.jpg (ref. cena01) | cena02.mp4 · 720p | 0 + 12 |
-|   | **Total** | **16 s** | **2 imagens: 0** | **2 vídeos: 24** | **24** |
+## Comandos
+- `flow.py storyboard projeto.json --itens imagens --abrir` → `storyboard.html` + `itens_imagens.json` (etapa das imagens).
+- Depois das imagens, o mesmo comando mostra as imagens na página para a aprovação.
+- `flow.py storyboard projeto.json --itens videos` → `itens_videos.json` (só das imagens aprovadas).
 
-**Saldo:** <N> créditos → sobram <N − total>.
-
-**Cena 1: prompt da imagem**
-<bloco de código com o prompt completo>
-**Cena 1: prompt do vídeo**
-<bloco de código com o prompt completo>
-(repita para cada cena; prompts prontos da pessoa entram exatamente como ela mandou)
-
-**Posso gerar as <N> imagens (0 créditos)?**
-```
-
-## Regras da tabela
-- **Créditos por cena:** "imagem + vídeo" (a imagem é sempre 0). Some +5 na cena quando o download for 1080p ("0 + 12 + 5").
-- **Imagem com referência:** escreva de qual cena ela herda a pessoa ("ref. cena01").
-- **Só imagens** (projeto de fotos): tire a coluna Vídeo e a linha de créditos mostra 0.
-- **Primeira pergunta é sempre sobre as imagens**, que não custam nada. O custo dos vídeos é mostrado de novo, só com as imagens aprovadas, antes do `--confirmo`.
+## Na conversa
+Além de abrir a página, mostre um resumo curto: a tabela (cena, duração, transição, créditos), o total, o saldo e a pergunta da etapa ("Posso gerar as N imagens (0 créditos)?"). Os prompts completos ficam na página.
 
 ## Quando o saldo não cobre tudo
 Diga quanto falta e dê as saídas, sem escolher pela pessoa:
