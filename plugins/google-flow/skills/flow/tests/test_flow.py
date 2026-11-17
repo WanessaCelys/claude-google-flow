@@ -9,6 +9,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import flow as F  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def sem_navegador(monkeypatch, tmp_path):
+    """Nenhum teste pode abrir o Chrome nem usar a pasta real de login: se algum código chegar
+    até o navegador, o teste falha na hora (sem gerar nada, sem gastar crédito)."""
+    def proibido(*a, **k):
+        raise AssertionError("o teste tentou abrir o Chrome")
+    monkeypatch.setattr(F, "_abrir", proibido)
+    monkeypatch.setattr(F, "_abrir_chrome", proibido)
+    monkeypatch.setattr(F, "CONFIG", tmp_path / "flow-config")
+
+
 def test_custo_por_duracao_e_modelo(monkeypatch):
     monkeypatch.delenv("FLOW_OMNI", raising=False)
     assert (F.custo_video(8), F.custo_video(10)) == (12, 15)  # Omni 1.1
@@ -236,3 +247,125 @@ def test_ampliar_sem_confirmacao_nao_gasta():
     with pytest.raises(SystemExit) as e:
         F.ampliar("https://flow.google.com/project/p/edit/m", "s.mp4", confirmo=False)
     assert "--confirmo" in str(e.value)
+
+
+# ---------- imagem em tamanho original (desde 17/11/2026 a grade só entrega miniatura WebP) ----------
+
+def test_escolhe_a_imagem_principal_pela_area_na_tela():
+    imagens = [
+        {"src": "faixa1", "w": 896, "h": 1200, "area": 60 * 80},      # miniatura da faixa: arquivo grande, tela pequena
+        {"src": "principal", "w": 768, "h": 1376, "area": 500 * 900},  # a imagem aberta
+        {"src": "icone", "w": 64, "h": 64, "area": 900 * 900},         # pequena demais para ser a imagem
+    ]
+    assert F.escolher_imagem_principal(imagens) == "principal"
+    assert F.escolher_imagem_principal([]) is None
+
+
+# ---------- correções da auditoria de segurança (17/11/2026) ----------
+
+def test_lote_recusa_tipo_desconhecido(tmp_path):
+    for tipo in ("Video", "vídeo", "image", ""):
+        with pytest.raises(SystemExit) as e:
+            F.plano_do_lote([{"tipo": tipo, "prompt": "p", "saida": "x.mp4", "imagem": "i.jpg", "segundos": 8}], tmp_path)
+        assert "tipo" in str(e.value)
+
+
+def test_lote_recusa_caminho_fora_da_pasta(tmp_path):
+    for item in ({"tipo": "imagem", "prompt": "p", "saida": "../fora.jpg"},
+                 {"tipo": "imagem", "prompt": "p", "saida": str(tmp_path.parent / "abs.jpg")},
+                 {"tipo": "imagem", "prompt": "p", "saida": "ok.jpg", "referencias": ["../../segredo.jpg"]},
+                 {"tipo": "video", "prompt": "p", "saida": "ok.mp4", "imagem": "/etc/passwd", "segundos": 8}):
+        with pytest.raises(SystemExit) as e:
+            F.plano_do_lote([item], tmp_path)
+        assert "fora da pasta" in str(e.value)
+
+
+def test_max_inclui_os_5_do_1080p(monkeypatch):
+    monkeypatch.delenv("FLOW_OMNI", raising=False)
+    with pytest.raises(SystemExit) as e:  # 12 + 5 = 17 > 12
+        F.gerar_video("p", [], "nao_existe.mp4", 8, confirmo=True, maximo=12, baixar="1080p")
+    assert "17" in str(e.value) and "limite" in str(e.value)
+    with pytest.raises(SystemExit):  # duração desconhecida: o teto precisa sobrar depois dos 5 do 1080p
+        F.gerar_video("p", [], "nao_existe.mp4", 14, confirmo=True, maximo=5, baixar="1080p")
+
+
+def test_marcador_de_gerado_nao_cobra_de_novo(tmp_path, monkeypatch):
+    monkeypatch.delenv("FLOW_OMNI", raising=False)
+    F.marcador(tmp_path / "v.mp4").write_text('{"nome": "Clipe X", "conta": 1}', encoding="utf-8")
+    itens = [{"tipo": "video", "prompt": "p", "saida": "v.mp4", "imagem": "i.jpg", "segundos": 8},
+             {"tipo": "video", "prompt": "p", "saida": "w.mp4", "imagem": "i.jpg", "segundos": 8}]
+    faltam, custo = F.plano_do_lote(itens, tmp_path)
+    assert [i["saida"] for i in faltam] == ["v.mp4", "w.mp4"] and custo == 12  # v.mp4 só falta baixar
+
+
+def test_nao_sobrescreve_saida(tmp_path):
+    existe = tmp_path / "ja.jpg"
+    existe.write_bytes(b"x")
+    with pytest.raises(SystemExit) as e:
+        F.gerar_imagem("p", existe)
+    assert "já existe" in str(e.value)
+    v = tmp_path / "ja.mp4"
+    v.write_bytes(b"x")
+    with pytest.raises(SystemExit):
+        F.gerar_video("p", [], v, 8, confirmo=True)
+
+
+def test_ampliar_so_aceita_link_do_flow():
+    for link in ("https://exemplo.com/x", "http://flow.google.com/project/p/edit/m", "file:///c:/x"):
+        with pytest.raises(SystemExit) as e:
+            F.ampliar(link, "s.mp4", confirmo=True)
+        assert "flow.google.com" in str(e.value)
+
+
+def test_fechar_chrome_so_da_conta_certa():
+    import re
+    p1 = F.padrao_perfil(r"C:\Users\x\.config\flow\flow-perfil")
+    assert re.search(p1, r'chrome.exe --remote-debugging-port=9333 --user-data-dir=C:\Users\x\.config\flow\flow-perfil --no-first-run')
+    assert re.search(p1, r'chrome.exe "--user-data-dir=C:\Users\x\.config\flow\flow-perfil" x')
+    assert not re.search(p1, r'chrome.exe --user-data-dir=C:\Users\x\.config\flow\flow-perfil-2 --no-first-run')
+
+
+# ---------- juntar os vídeos (ffmpeg, sem crédito) ----------
+
+def test_juntar_com_corte_usa_concat_e_normaliza_o_formato():
+    cmd = F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4", "c.mp4"], "f.mp4", duracoes=[8, 8, 8],
+                           com_audio=[True, True, True], formato="9:16")
+    filtro = cmd[cmd.index("-filter_complex") + 1]
+    assert "concat=n=3:v=1:a=1" in filtro and "scale=720:1280" in filtro and "fps=30" in filtro
+    assert cmd[-1] == "f.mp4" and "libx264" in cmd
+
+
+def test_juntar_suave_calcula_os_pontos_da_transicao():
+    cmd = F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4", "c.mp4"], "f.mp4", duracoes=[8, 8, 8],
+                           com_audio=[True, True, True], transicao="suave", formato="16:9")
+    filtro = cmd[cmd.index("-filter_complex") + 1]
+    assert "xfade=transition=fade:duration=0.4:offset=7.6" in filtro
+    assert "offset=15.2" in filtro and "acrossfade=d=0.4" in filtro and "scale=1280:720" in filtro
+
+
+def test_juntar_clipe_sem_som_ganha_silencio():
+    cmd = F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4"], "f.mp4", duracoes=[8, 6], com_audio=[True, False])
+    filtro = cmd[cmd.index("-filter_complex") + 1]
+    assert "anullsrc" in filtro and "atrim=duration=6" in filtro
+
+
+def test_juntar_com_musica_de_fundo():
+    cmd = F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4"], "f.mp4", duracoes=[8, 8], com_audio=[True, True],
+                           musica="m.mp3", volume_musica=0.2)
+    assert cmd[cmd.index("m.mp3") - 3:cmd.index("m.mp3")] == ["-stream_loop", "-1", "-i"]
+    filtro = cmd[cmd.index("-filter_complex") + 1]
+    assert "volume=0.2" in filtro and "amix=inputs=2:duration=first" in filtro and "normalize=0" in filtro
+
+
+def test_juntar_recusa_pedido_invalido():
+    with pytest.raises(SystemExit):
+        F.comando_juntar("ffmpeg", ["a.mp4"], "f.mp4", duracoes=[8], com_audio=[True])
+    with pytest.raises(SystemExit):
+        F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4"], "f.mp4", duracoes=[8, 8], com_audio=[True, True], transicao="zoom")
+
+
+def test_le_duracao_e_audio_do_ffmpeg():
+    saida = ("Input #0, mov,mp4,m4a, from 'a.mp4':\n  Duration: 00:00:08.04, start: 0.000000, bitrate: 1840 kb/s\n"
+             "  Stream #0:0[0x1](und): Video: h264\n  Stream #0:1[0x2](und): Audio: aac (LC), 48000 Hz, stereo\n")
+    assert F.ler_info_ffmpeg(saida) == (8.04, True)
+    assert F.ler_info_ffmpeg("  Duration: 00:01:02.50, start\n  Stream #0:0: Video: h264\n") == (62.5, False)

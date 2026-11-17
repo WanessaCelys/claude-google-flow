@@ -15,9 +15,9 @@ O robô é **só o motor**. O estilo do prompt está nas receitas (`receitas/`),
 
 Faça nesta ordem, explicando cada passo em linguagem simples. **Todos os comandos `flow.py` rodam de dentro da pasta `scripts/` da skill.**
 
-1. **Instalar:** `pip install playwright` (não precisa baixar navegador: usa o Chrome instalado). Precisa de Python 3.10+ e do Google Chrome.
+1. **Instalar:** `pip install playwright imageio-ffmpeg` (não precisa baixar navegador: usa o Chrome instalado; o `imageio-ffmpeg` é para juntar vídeos). Precisa de Python 3.10+ e do Google Chrome.
 2. **Conferir:** `python flow.py verificar` diz o que falta (Playwright, Chrome, login).
-3. **Conectar a conta do Flow:** `python flow.py login` abre uma janela do Chrome. **A pessoa entra na própria conta Google** nessa janela e deixa ela aberta. O Claude nunca digita senha. O login fica salvo em `~/.config/flow` (ou na pasta de `FLOW_HOME`) e não precisa repetir.
+3. **Conectar a conta do Flow:** `python flow.py login` abre uma janela do Chrome. **A pessoa entra na própria conta Google** nessa janela e deixa ela aberta. O Claude nunca digita senha. O login fica salvo em `~/.config/flow` (ou na pasta de `FLOW_HOME`) e não precisa repetir. Avise antes: os termos do Google costumam proibir automação, com risco de bloqueio da conta; a decisão de usar é da pessoa. Enquanto a janela do robô está aberta, programas do próprio computador conseguem controlá-la: no fim do trabalho, feche com `python flow.py fechar` (o login continua salvo).
 4. **Perguntas iniciais:** rode `python flow.py preferencias`. Se disser "Sem preferências salvas", faça as perguntas abaixo (numa tela de perguntas, se der) e salve as respostas.
 
 ### Perguntas iniciais
@@ -29,7 +29,7 @@ Faça nesta ordem, explicando cada passo em linguagem simples. **Todos os comand
 | Os vídeos gerados têm música? | Sem música (você põe na edição) · Com música · Depende do vídeo | `--musica sem` / `com` / `depende` |
 | Legenda escrita no vídeo? | Sem (recomendado: o gerador escreve errado; legenda se põe na edição) · Com · Depende | `--legendas sem` / `com` / `depende` |
 | Formato mais usado? | 9:16 (Reels, TikTok) · 16:9 (YouTube, site) · 1:1 · Depende | `--formato 9:16` / `16:9` / `1:1` / `depende` |
-| Baixar os vídeos em 1080p? | **Não, 720p (recomendado:** grátis, o tamanho original, ótimo para Reels, TikTok e anúncios) · Sim, 1080p (**+5 créditos por vídeo**) · Depende do vídeo | `--download 720p` / `1080p` / `depende` |
+| Baixar os vídeos em 1080p? *(o vídeo em si sempre gasta os créditos da geração; aqui é só o download)* | **Não, 720p (recomendado:** o tamanho original, sem custo extra no download, ótimo para Reels, TikTok e anúncios) · Sim, 1080p (**+5 créditos por vídeo**, além da geração) · Depende do vídeo | `--download 720p` / `1080p` / `depende` |
 | Tem mais de uma conta do Flow e quer que o robô use todas? | Não, só uma (recomendado) · Sim | se sim, siga `referencias/varias-contas.md` |
 
 ```bash
@@ -56,9 +56,22 @@ Quando o pedido tem várias cenas ou peças (um anúncio com cenas, uma leva de 
 3. **Imagens em lote:** monte `<projeto>/itens.json` só com as imagens (nomes numerados: `cena01.jpg`, `cena02.jpg`…) e rode `flow.py lote`. A mesma pessoa em várias cenas: gere primeiro a cena em que ela aparece melhor, e use essa imagem como `referencias` nas outras.
 4. **Aprovação das imagens:** mostre cada imagem e confira mãos, rosto, objetos e texto. Refaça só as reprovadas (apague o arquivo e rode o lote de novo: ele pula as que já existem).
 5. **Vídeos em lote:** acrescente ao `itens.json` os vídeos das imagens aprovadas (`cena01.mp4`…). Mostre de novo a tabela de custo dos vídeos e só rode com `--confirmo` depois do ok.
-6. **Entrega:** a pasta do projeto com os arquivos numerados na ordem do roteiro e o `itens.json` (que guarda todos os prompts usados, para refazer ou ajustar depois).
+6. **Juntar (se a pessoa quiser um vídeo só):** ofereça unir os clipes na ordem do roteiro com `flow.py juntar` (veja abaixo). Não gasta crédito.
+7. **Entrega:** a pasta do projeto com os arquivos numerados na ordem do roteiro, o vídeo final (se juntou) e o `itens.json` (que guarda todos os prompts usados, para refazer ou ajustar depois).
 
-A montagem final (cortes, narração, legenda, música, motion) não faz parte desta skill.
+Narração, legenda e motion design não fazem parte desta skill.
+
+## Juntar os vídeos (sem crédito)
+
+Une os clipes num vídeo só, no computador da pessoa (não usa o Flow). Todos ficam no mesmo tamanho (9:16 = 720×1280, 16:9 = 1280×720, 1:1) e a 30 quadros por segundo; clipe sem som ganha silêncio.
+
+```bash
+python flow.py juntar cena01.mp4 cena02.mp4 cena03.mp4 --saida final.mp4 [--transicao corte|suave] [--musica fundo.mp3] [--volume-musica 0.15] [--formato 9:16]
+```
+- Pergunte antes: **corte seco** (padrão, ritmo de anúncio) ou **transição suave** (0,4 s, sensação mais calma).
+- **Música:** só se a pessoa mandar o arquivo; entra em loop, baixa (15%), por baixo das falas. Lembre que a música precisa ter licença para uso comercial se o vídeo for para cliente ou anúncio.
+- Precisa do ffmpeg: se faltar, instale com `pip install imageio-ffmpeg` (não precisa de mais nada).
+- Não sobrescreve: se o arquivo final já existe, escolha outro nome.
 
 ## Comandos
 
@@ -74,6 +87,8 @@ A montagem final (cortes, narração, legenda, música, motion) não faz parte d
 | Vídeo + versão 1080p (+5 créditos) | acrescente `--baixar 1080p` |
 | 1080p de um vídeo já gerado (+5 créditos) | `python flow.py ampliar <link da página do vídeo no Flow> --saida clipe_1080p.mp4 --confirmo` |
 | Várias de uma vez | `python flow.py lote itens.json [--confirmo] [--max N]` |
+| Juntar os clipes num vídeo só (sem crédito) | `python flow.py juntar a.mp4 b.mp4 --saida final.mp4 [--transicao suave] [--musica m.mp3]` |
+| Fechar a janela do robô no fim do trabalho | `python flow.py fechar` |
 | O Flow mudou a tela | `python flow.py mapear` |
 
 - Use `--prompt-arquivo` para prompts longos (evita problema de aspas). `--ref` repete: várias imagens entram juntas (mesma pessoa, mesmo estilo).
@@ -96,7 +111,7 @@ Imagem: Nano Banana 2.1, sem crédito. Vídeo (720p, 1 cópia), escolhido pela d
 | 12 s | Omni 1.2 Flash | 42 |
 | 15 s | Omni 1.2 Flash | 60 |
 
-**Download em 1080p (opcional):** depois de gerado, o Flow oferece a versão ampliada em 1080p por **+5 créditos por vídeo** (o 720p é o tamanho original e não custa nada; 4K exige upgrade do plano). Some esses 5 créditos na tabela de custo sempre que a preferência for 1080p e passe `--baixar 1080p` no vídeo (ou `"baixar": "1080p"` no item do lote): o robô salva `clipe.mp4` (720p) e `clipe_1080p.mp4`. O robô **não** usa a preferência sozinho, para nenhum crédito sair fora da tabela. O Flow leva alguns minutos ampliando (~1,5 min num vídeo de 15 s). Pedir de novo o 1080p de um vídeo já ampliado não cobrou outra vez (16/11/2026).
+**Download em 1080p (opcional):** depois de gerado, o Flow oferece a versão ampliada em 1080p por **+5 créditos por vídeo** (baixar em 720p, o tamanho original, não tem custo extra além dos créditos da geração; 4K exige upgrade do plano). Some esses 5 créditos na tabela de custo sempre que a preferência for 1080p e passe `--baixar 1080p` no vídeo (ou `"baixar": "1080p"` no item do lote): o robô salva `clipe.mp4` (720p) e `clipe_1080p.mp4`. O robô **não** usa a preferência sozinho, para nenhum crédito sair fora da tabela. O Flow leva alguns minutos ampliando (~1,5 min num vídeo de 15 s). Pedir de novo o 1080p de um vídeo já ampliado não cobrou outra vez (16/11/2026).
 
 Duração fora da tabela: o robô lê o preço que o Flow mostra e só gera se couber no `--max` aprovado pela pessoa. **O Omni 1.1 sai do Flow em 5/12/2026**; depois disso rode com `FLOW_OMNI=1.2` (o 1.2 custa o dobro nas mesmas durações).
 
@@ -129,4 +144,4 @@ O normal é uma conta só. Se a pessoa respondeu sim na pergunta inicial, ou ped
 
 ## Quando falhar
 
-O erro diz onde parou. Nada foi gasto se o erro vier antes de "Conta N, X créditos". Tela mudou: `mapear` e corrija só o dicionário `SELETORES` em `scripts/flow.py`. Urgente: `referencias/flow-navegador.md` (fazer pelo Chrome com o Claude, mais caro). Vídeo só com texto é um recurso novo: se o robô parar nesses casos, avise a pessoa e ofereça o caminho testado (vídeo a partir de imagem, 720p).
+O erro diz onde parou. Nada foi gasto se o erro vier antes de "Conta N, X créditos". **Gerou mas não baixou:** rode o mesmo comando de novo; o robô guarda um marcador (`<saida>.gerado.json`) e só baixa, sem gerar nem gastar outra vez. O robô não sobrescreve arquivo que já existe. Tela mudou: `mapear` e corrija **só os nomes de botões** do dicionário `SELETORES` em `scripts/flow.py`; nunca mexa em `PROIBIDOS`, nas conferências de custo nem no `--confirmo`, e mostre a mudança à pessoa antes de usar. Urgente: `referencias/flow-navegador.md` (fazer pelo Chrome com o Claude, mais caro). Vídeo só com texto é um recurso novo: se o robô parar nesses casos, avise a pessoa e ofereça o caminho testado (vídeo a partir de imagem, 720p).

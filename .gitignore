@@ -11,3 +11,6 @@ flow-perfil*/
 flow-projeto*.txt
 .DS_Store
 Thumbs.db
+
+!docs/*.jpg
+!docs/*.png

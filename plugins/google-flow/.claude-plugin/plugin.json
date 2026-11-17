@@ -1,7 +1,7 @@
 {
   "name": "google-flow",
-  "version": "1.0.1",
-  "description": "Gera imagens (Nano Banana) e vídeos (Omni) no Google Flow pelo seu próprio Chrome, com um comando por geração. Perguntas iniciais de preferência, receitas de prompt (natural/UGC, institucional, produto, fundos), modo projeto com storyboard e lote, download em 1080p, e sempre mostra o custo em créditos antes de gerar.",
+  "version": "1.1.0",
+  "description": "Gera imagens (Nano Banana) e vídeos (Omni) no Google Flow pelo seu próprio Chrome, com um comando por geração. Perguntas iniciais de preferência, receitas de prompt (natural/UGC, institucional, produto, fundos), modo projeto com storyboard e lote, junta as cenas num vídeo só, download em 1080p, e sempre mostra o custo em créditos antes de gerar.",
   "author": {
     "name": "Wanessa Celys"
   },

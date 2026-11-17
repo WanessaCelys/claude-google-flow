@@ -10,6 +10,8 @@ clicar na tela passo a passo (um comando por geração, bem menos tokens). Serve
   python flow.py imagem --prompt-arquivo p.txt --saida img.jpg [--ref a.jpg --ref b.jpg] [--formato 9:16]
   python flow.py video  --prompt-arquivo p.txt [--imagem img.jpg] --saida clipe.mp4 --segundos 8 --confirmo [--max N]
                         [--formato 9:16] [--baixar 1080p]   # sem --imagem: so texto; gera sempre em 720p
+  python flow.py juntar cena01.mp4 cena02.mp4 --saida final.mp4 [--transicao suave] [--musica m.mp3]   # sem crédito
+  python flow.py fechar                             # fecha a janela do robô quando terminar (o login continua salvo)
   python flow.py ampliar <link do vídeo no Flow> --saida clipe_1080p.mp4 --confirmo   # 1080p de um vídeo já gerado
   python flow.py lote itens.json [--confirmo] [--max N]   # várias gerações; pula as que já existem
 
@@ -206,12 +208,38 @@ def conferir_gasto(saldo, custo):
 
 # ---------- navegador ----------
 
+def padrao_perfil(perfil):
+    """Expressão que acha, na linha de comando de um processo, exatamente este perfil (não o -2, -3...)."""
+    return r'--user-data-dir="?' + re.escape(str(perfil)) + r'"?(?:\s|$)'
+
+
+def _linhas_de_comando_do_chrome():
+    if sys.platform == "win32":
+        r = subprocess.run(["powershell", "-NoProfile", "-Command",
+                            "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | ForEach-Object { $_.CommandLine }"],
+                           capture_output=True, text=True)
+    else:
+        r = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True)
+    return r.stdout.splitlines()
+
+
+def _porta_e_do_nosso_chrome(porta, perfil):
+    """A porta de controle só é usada se quem está nela é o Chrome do perfil do robô. Outro Chrome aberto com
+    depuração (de outro programa ou outro perfil) nunca é controlado."""
+    alvo = re.compile(padrao_perfil(perfil))
+    return any(f"--remote-debugging-port={porta}" in l and alvo.search(l) for l in _linhas_de_comando_do_chrome())
+
+
 def _chrome_aberto():
+    c = conta(ATUAL)
     try:
-        urllib.request.urlopen(f"http://127.0.0.1:{conta(ATUAL)['porta']}/json/version", timeout=2)
-        return True
+        urllib.request.urlopen(f"http://127.0.0.1:{c['porta']}/json/version", timeout=2)
     except OSError:
         return False
+    if not _porta_e_do_nosso_chrome(c["porta"], c["perfil"]):
+        sys.exit(f"A porta {c['porta']} está em uso por outro programa ou outro Chrome, não pelo Chrome do robô "
+                 f"({c['perfil']}). Por segurança o robô não se conecta. Feche esse programa e rode de novo.")
+    return True
 
 
 def _abrir_chrome():
@@ -232,14 +260,14 @@ def _abrir_chrome():
 
 def _fechar_chrome_da_conta():
     """Fecha só o Chrome desta conta (pelo perfil). O login fica salvo no perfil."""
-    perfil = str(conta(ATUAL)["perfil"]).replace("'", "")
+    padrao = padrao_perfil(conta(ATUAL)["perfil"]).replace("'", "''")
     if sys.platform != "win32":
-        subprocess.run(["pkill", "-f", perfil], capture_output=True)
+        subprocess.run(["pkill", "-f", "--", padrao], capture_output=True)
         time.sleep(3)
         return
     subprocess.run(["powershell", "-NoProfile", "-Command",
                     "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
-                    f"Where-Object {{ $_.CommandLine -like '*{perfil}*' }} | "
+                    f"Where-Object {{ $_.CommandLine -match '{padrao}' }} | "
                     "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"],
                    capture_output=True)
     time.sleep(3)
@@ -382,8 +410,16 @@ def _apagar_comando(pg):
 
 def _subir_imagem(pg, arquivo, limpar=True):
     """Envia a imagem com nome único (cena + horário) e coloca no comando. Assim nunca pega uma imagem antiga."""
-    unico = Path(tempfile.gettempdir()) / f"{Path(arquivo).stem}_{time.strftime('%H%M%S')}{Path(arquivo).suffix}"
+    pasta_tmp = Path(tempfile.mkdtemp(prefix="flow_"))
+    unico = pasta_tmp / f"{Path(arquivo).stem}_{time.strftime('%H%M%S')}{Path(arquivo).suffix}"
     shutil.copy(arquivo, unico)
+    try:
+        _enviar_arquivo(pg, unico, limpar)
+    finally:
+        shutil.rmtree(pasta_tmp, ignore_errors=True)
+
+
+def _enviar_arquivo(pg, unico, limpar):
     _fechar_paineis(pg)
     if limpar:
         _apagar_comando(pg)
@@ -404,7 +440,6 @@ def _subir_imagem(pg, arquivo, limpar=True):
     pg.locator(".cdk-overlay-container").get_by_text(SELETORES["incluir"], exact=True).click()
     pg.wait_for_timeout(1500)
     _fechar_paineis(pg)
-    unico.unlink(missing_ok=True)
 
 
 def _escrever_comando(pg, texto):
@@ -453,6 +488,29 @@ def escolher_nova(antes, tiles):
     return None
 
 
+def escolher_imagem_principal(imagens):
+    """Na página da mídia aberta, a imagem principal é a que ocupa mais área na tela (as da faixa de cima
+    são miniaturas pequenas na tela, mesmo com arquivo grande). Ignora ícones (< 500 px)."""
+    candidatas = [i for i in imagens if i["w"] >= 500 and i["h"] >= 500]
+    return max(candidatas, key=lambda i: i["area"])["src"] if candidatas else None
+
+
+JS_IMAGENS_DA_PAGINA = """() => [...document.querySelectorAll('img')].map(i => {
+    const r = i.getBoundingClientRect();
+    return {src: i.currentSrc || i.src, w: i.naturalWidth, h: i.naturalHeight, area: r.width * r.height};
+}).filter(x => x.src)"""
+
+
+def _link_original_imagem(pg, nome):
+    """Desde 17/11/2026 a miniatura da grade é um WebP pequeno. A imagem em tamanho original (1K) aparece
+    ao abrir a mídia: abre a página dela (…/edit/<id>) e pega a imagem principal."""
+    if "/edit/" not in pg.url:
+        pg.locator(f'flow-grid-tile-container[aria-label="{nome}"]').first.click()
+        pg.wait_for_url(re.compile(r".*/edit/.*"), timeout=60000)
+    pg.wait_for_timeout(3000)
+    return escolher_imagem_principal(pg.evaluate(JS_IMAGENS_DA_PAGINA))
+
+
 def _link_da_midia(pg, tipo, nome):
     """Link da mídia da miniatura. No vídeo, o <img> é só a capa: passa o mouse para o <video> aparecer."""
     tile = pg.locator(f'flow-grid-tile-container[aria-label="{nome}"]').first
@@ -466,13 +524,42 @@ def _link_da_midia(pg, tipo, nome):
     return tile.evaluate(f"c => {{ const m = c.querySelector('{sel}'); return m ? (m.currentSrc || m.src) : ''; }}")
 
 
-def _enviar_e_baixar(pg, prompt, tipo, destino):
-    """tipo: 'image' ou 'video'. Gera, espera aparecer a mídia gerada na grade e baixa pelo link direto
-    (já é o tamanho original), sem abrir menus."""
-    antes = contar(pg.evaluate(JS_TILES, tipo))
-    _escrever_comando(pg, prompt)
-    _clicar(pg, "gerar")
-    nova, voltas, limite = None, 0, time.time() + ESPERA_GERACAO_MS / 1000
+def marcador(saida):
+    """Arquivo ao lado da saída que diz "já foi gerado (crédito usado), falta baixar"."""
+    return Path(f"{saida}.gerado.json")
+
+
+def ler_marcador(saida):
+    m = marcador(saida)
+    return json.loads(m.read_text(encoding="utf-8")) if m.exists() else None
+
+
+def _mostrar_tipo(pg, tipo):
+    """Filtra a grade (Imagens / Vídeos) para achar uma mídia mais antiga pelo nome."""
+    rotulo = "Vídeos" if tipo == "video" else "Imagens"
+    alvo = pg.get_by_text(rotulo, exact=True)
+    if alvo.count():
+        alvo.first.click()
+        pg.wait_for_timeout(2500)
+
+
+def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
+    """tipo: 'image' ou 'video'. Gera, espera aparecer a mídia gerada na grade e baixa o tamanho original.
+    Logo que a mídia aparece, grava o marcador: se o download falhar, rodar de novo só baixa, sem gerar
+    (e sem gastar) outra vez. `conferir_antes` roda depois de escrever o pedido e antes de clicar em gerar."""
+    pendente = ler_marcador(destino)
+    if pendente:
+        print(f"Já gerado antes ({pendente['nome']}): só baixando, sem gerar de novo.")
+        _mostrar_tipo(pg, tipo)
+        antes, nova = Counter(), {"nome": pendente["nome"], "src": ""}
+    else:
+        antes = contar(pg.evaluate(JS_TILES, tipo))
+        _escrever_comando(pg, prompt)
+        if conferir_antes:
+            conferir_antes()
+        _clicar(pg, "gerar")
+        nova = None
+    voltas, limite = 0, time.time() + ESPERA_GERACAO_MS / 1000
     while not nova:
         if time.time() > limite:
             sys.exit("A geração não apareceu na grade a tempo (falhou ou demorou). Confira no Flow antes de tentar de novo.")
@@ -482,23 +569,32 @@ def _enviar_e_baixar(pg, prompt, tipo, destino):
             pg.reload()
             pg.wait_for_timeout(8000)
         nova = escolher_nova(antes, pg.evaluate(JS_TILES, tipo))
+    if not pendente:
+        marcador(destino).parent.mkdir(parents=True, exist_ok=True)
+        marcador(destino).write_text(json.dumps({"nome": nova["nome"], "conta": ATUAL}, ensure_ascii=False), encoding="utf-8")
     corpo = b""
     for tentativa in range(24):  # a mídia pode ainda estar processando (até ~3 min)
         pg.wait_for_timeout(5000)
         if tentativa and tentativa % 6 == 0:
             pg.reload()
             pg.wait_for_timeout(8000)
-        nova = escolher_nova(antes, pg.evaluate(JS_TILES, tipo)) or nova
-        link = _link_da_midia(pg, tipo, nova["nome"]) or nova["src"]
+        if tipo == "image":
+            link = _link_original_imagem(pg, nova["nome"]) or nova["src"]
+        else:
+            if not pendente:
+                nova = escolher_nova(antes, pg.evaluate(JS_TILES, tipo)) or nova
+            link = _link_da_midia(pg, tipo, nova["nome"]) or nova["src"]
         resposta = pg.request.get(link)
         corpo = resposta.body() if resposta.ok else b""
         if baixado_ok(tipo, corpo, resposta.headers.get("content-type")):
             break
     else:
-        sys.exit(f"A mídia nova ({nova['nome']}) não baixou inteira. Ela está no Flow: baixe à mão ou rode de novo.")
+        sys.exit(f"A mídia ({nova['nome']}) foi gerada mas não baixou inteira. Rode o mesmo comando de novo: "
+                 "o robô só baixa, sem gerar nem gastar outra vez.")
     destino = Path(destino)
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_bytes(corpo)
+    marcador(destino).unlink(missing_ok=True)
     _ULTIMA_MIDIA["nome"] = nova["nome"]
     print(f"Baixada: {nova['nome'] or 'sem nome'}")
     return destino
@@ -633,6 +729,7 @@ def _ler_prompt(prompt, arquivo):
 
 def gerar_imagem(prompt, saida, referencias=(), formato="9:16"):
     """Imagem no Nano Banana (sem crédito). `referencias`: imagens que entram junto no comando (mesma pessoa, estilo...)."""
+    _nao_sobrescrever(saida)
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         ctx, pg = _abrir(p)
@@ -654,20 +751,38 @@ def gerar_video(prompt, imagens, saida, segundos, confirmo, maximo=None, modo="e
         sys.exit("Gasto não confirmado. Rode de novo com --confirmo depois de a pessoa aprovar o custo.")
     if modo == "frames":
         sys.exit("O modo Frames não está no script: gere pelo Chrome (referencias/flow-navegador.md).")
+    _nao_sobrescrever(saida)
+    extra = CUSTO_1080P if baixar == "1080p" else 0
+    if baixar == "1080p":
+        _nao_sobrescrever(saida_1080p(saida))
     custo = custo_conhecido(segundos)
+    teto_geracao = None
     if custo is None:
         if maximo is None:
             sys.exit(f"Não sei o custo de {segundos} s: rode com --max N (teto aprovado pela pessoa); "
                      "o script confere o preço que o Flow mostra antes de gerar. Nada foi gasto.")
+        teto_geracao = maximo - extra
+        if teto_geracao <= 0:
+            sys.exit(f"O limite combinado ({maximo}) não cobre nem o 1080p ({extra}). Nada foi gasto.")
         para_saldo = maximo
     else:
-        para_saldo = custo
-        if baixar == "1080p":
-            para_saldo += CUSTO_1080P
-        if maximo is not None and custo > maximo:
-            sys.exit(f"O clipe custa {custo}, acima do limite combinado ({maximo}). Nada foi gasto.")
+        para_saldo = custo + extra
+        if maximo is not None and para_saldo > maximo:
+            sys.exit(f"O clipe custa {para_saldo} ({custo} + {extra} do 1080p), acima do limite combinado ({maximo}). "
+                     "Nada foi gasto.")
+    pendente = ler_marcador(saida)
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
+        if pendente:  # já gerado antes: só baixa, na mesma conta, sem conferir saldo nem gastar
+            usar(pendente.get("conta", 1))
+            ctx, pg = _abrir(p)
+            _ir_ao_projeto(pg)
+            destino = _enviar_e_baixar(pg, prompt, "video", saida)
+            if baixar == "1080p":
+                _ir_a_midia(pg, nome=_ULTIMA_MIDIA["nome"])
+                _baixar_1080p(pg, saida_1080p(saida))
+            ctx.close()
+            return destino
         saldos = {}
         for n in contas_com_login():
             saldos[n] = _saldo_da_conta(p, n)
@@ -681,18 +796,36 @@ def gerar_video(prompt, imagens, saida, segundos, confirmo, maximo=None, modo="e
         _ir_ao_projeto(pg)
         saldo_atual = _saldo(pg)
         conferir_gasto(saldo_atual, para_saldo)
-        mostrado = _configurar(pg, opcoes_video(segundos, modo, formato), custo, segundos, teto=maximo)
+        mostrado = _configurar(pg, opcoes_video(segundos, modo, formato), custo, segundos, teto=teto_geracao)
         print(f"Conta {n}, {mostrado} créditos no Omni {modelo_omni(segundos)} (720p), sobram {saldo_atual - mostrado}")
         if not imagens:
             _apagar_comando(pg)
         for i, arq in enumerate(imagens):
             _subir_imagem(pg, arq, limpar=(i == 0))
-        destino = _enviar_e_baixar(pg, prompt, "video", saida)
+        destino = _enviar_e_baixar(pg, prompt, "video", saida,
+                                   conferir_antes=lambda: _reconferir_custo(pg, custo, teto_geracao))
         if baixar == "1080p":
             _ir_a_midia(pg, nome=_ULTIMA_MIDIA["nome"])
             _baixar_1080p(pg, saida_1080p(saida))
         ctx.close()
     return destino
+
+
+def _reconferir_custo(pg, esperado, teto):
+    """Lê de novo o "A geração vai usar N créditos" logo antes de gerar (depois de subir as imagens e escrever
+    o pedido), para nada ter mudado o custo no caminho."""
+    _fechar_paineis(pg)
+    _clicar(pg, "config")
+    pg.wait_for_timeout(800)
+    try:
+        conferir_custo_menu(ler_custo_menu(pg.locator(".cdk-overlay-container").inner_text()), esperado, teto)
+    finally:
+        _fechar_paineis(pg)
+
+
+def _nao_sobrescrever(saida):
+    if Path(saida).exists():
+        sys.exit(f"{saida} já existe. Apague ou escolha outro nome; nada foi gerado.")
 
 
 # ---------- 1080p: menu "Baixar mídia" > "1080p Resolução ampliada" (cobrado à parte) ----------
@@ -758,6 +891,9 @@ def ampliar(midia, saida, confirmo, maximo=None):
     """1080p de um vídeo que já está no Flow (o link da página dele). Gasta crédito: exige `confirmo`."""
     if not confirmo:
         sys.exit("Gasto não confirmado. Rode de novo com --confirmo depois de a pessoa aprovar o custo.")
+    if not str(midia).startswith("https://flow.google.com/"):
+        sys.exit("O link precisa ser da página do vídeo no Flow (https://flow.google.com/...). Nada foi gasto.")
+    _nao_sobrescrever(saida)
     if maximo is not None and CUSTO_1080P > maximo:
         sys.exit(f"O 1080p custa {CUSTO_1080P}, acima do limite combinado ({maximo}). Nada foi gasto.")
     from playwright.sync_api import sync_playwright
@@ -773,12 +909,138 @@ def ampliar(midia, saida, confirmo, maximo=None):
     return destino
 
 
+# ---------- juntar os vídeos (ffmpeg local, não usa o Flow nem gasta crédito) ----------
+
+TAMANHOS = {"9:16": (720, 1280), "16:9": (1280, 720), "1:1": (720, 720)}
+TRANSICAO_S = 0.4
+
+
+def achar_ffmpeg():
+    """FLOW_FFMPEG, o ffmpeg do sistema ou o do pacote imageio-ffmpeg (pip install imageio-ffmpeg)."""
+    if os.environ.get("FLOW_FFMPEG"):
+        return os.environ["FLOW_FFMPEG"]
+    if shutil.which("ffmpeg"):
+        return shutil.which("ffmpeg")
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        sys.exit("Para juntar vídeos falta o ffmpeg. Instale com: pip install imageio-ffmpeg")
+
+
+def ler_info_ffmpeg(texto):
+    """(duração em segundos, tem áudio?) a partir do que o `ffmpeg -i arquivo` escreve."""
+    m = re.search(r"Duration:\s*(\d+):(\d+):([\d.]+)", texto or "")
+    if not m:
+        sys.exit("Não consegui ler a duração do vídeo.")
+    duracao = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+    return round(duracao, 3), bool(re.search(r"Stream #.*: Audio:", texto))
+
+
+def _info_do_video(ffmpeg, arquivo):
+    r = subprocess.run([ffmpeg, "-hide_banner", "-i", str(arquivo)], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    return ler_info_ffmpeg(r.stderr)
+
+
+def comando_juntar(ffmpeg, entradas, saida, duracoes, com_audio, transicao="corte", musica=None,
+                   volume_musica=0.15, formato="9:16"):
+    """Monta o comando do ffmpeg: todos os clipes no mesmo tamanho e ritmo (30 q/s), na ordem, com corte seco
+    ou transição suave; clipe sem som ganha silêncio; música opcional em loop, baixa, por baixo das falas."""
+    if len(entradas) < 2:
+        sys.exit("Para juntar são precisos pelo menos 2 vídeos.")
+    if transicao not in ("corte", "suave"):
+        sys.exit("Transição: use 'corte' ou 'suave'.")
+    if formato not in TAMANHOS:
+        sys.exit(f"Formato para juntar: {', '.join(TAMANHOS)}.")
+    w, h = TAMANHOS[formato]
+    cmd = [ffmpeg, "-hide_banner", "-y"]
+    for e in entradas:
+        cmd += ["-i", str(e)]
+    if musica:
+        cmd += ["-stream_loop", "-1", "-i", str(musica)]
+    partes = []
+    for i, (d, a) in enumerate(zip(duracoes, com_audio)):
+        partes.append(f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,"
+                      f"setsar=1,fps=30,format=yuv420p[v{i}]")
+        if a:
+            partes.append(f"[{i}:a]aresample=48000,aformat=channel_layouts=stereo[a{i}]")
+        else:
+            partes.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={d:g}[a{i}]")
+    n = len(entradas)
+    if transicao == "corte":
+        partes.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[v][a]")
+    else:
+        v, a, acumulado = "[v0]", "[a0]", 0.0
+        for i in range(1, n):
+            acumulado += duracoes[i - 1] - TRANSICAO_S
+            vo = "[v]" if i == n - 1 else f"[x{i}]"
+            ao = "[a]" if i == n - 1 else f"[y{i}]"
+            partes.append(f"{v}[v{i}]xfade=transition=fade:duration={TRANSICAO_S}:offset={round(acumulado, 3):g}{vo}")
+            partes.append(f"{a}[a{i}]acrossfade=d={TRANSICAO_S}{ao}")
+            v, a = vo, ao
+    saida_audio = "[a]"
+    if musica:
+        partes.append(f"[{n}:a]aresample=48000,aformat=channel_layouts=stereo,volume={volume_musica:g}[m]")
+        partes.append("[a][m]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[am]")
+        saida_audio = "[am]"
+    cmd += ["-filter_complex", ";".join(partes), "-map", "[v]", "-map", saida_audio,
+            "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart", str(saida)]
+    return cmd
+
+
+def juntar(entradas, saida, transicao="corte", musica=None, volume_musica=0.15, formato=None):
+    """Une os clipes na ordem dada num único vídeo. Roda no computador da pessoa; não gasta crédito."""
+    _nao_sobrescrever(saida)
+    for e in entradas + ([musica] if musica else []):
+        if not Path(e).exists():
+            sys.exit(f"Não achei {e}.")
+    ffmpeg = achar_ffmpeg()
+    infos = [_info_do_video(ffmpeg, e) for e in entradas]
+    cmd = comando_juntar(ffmpeg, entradas, saida, [d for d, _ in infos], [a for _, a in infos], transicao,
+                         musica, volume_musica, formato_padrao(formato))
+    Path(saida).parent.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if r.returncode != 0 or not Path(saida).exists():
+        ultima = (r.stderr or "erro desconhecido").strip().splitlines()[-1]
+        sys.exit(f"O ffmpeg não conseguiu juntar: {ultima}")
+    total = sum(d for d, _ in infos) - (TRANSICAO_S * (len(entradas) - 1) if transicao == "suave" else 0)
+    print(f"Vídeo final: {saida} ({len(entradas)} clipes, {total:.1f} s)")
+    return Path(saida)
+
+
+TIPOS_DO_LOTE = ("imagem", "video")
+
+
+def _dentro_da_pasta(base, caminho):
+    raiz = Path(base).resolve()
+    alvo = (raiz / caminho).resolve()
+    if alvo != raiz and raiz not in alvo.parents:
+        sys.exit(f"Caminho fora da pasta do lote: {caminho}. Use só caminhos dentro de {raiz}. Nada foi gerado.")
+    return alvo
+
+
+def validar_lote(itens, base):
+    """Antes de planejar ou gastar: só tipos conhecidos e só caminhos dentro da pasta do JSON."""
+    for i in itens:
+        if i.get("tipo") not in TIPOS_DO_LOTE:
+            sys.exit(f"Item com tipo inválido ({i.get('tipo')!r}): use \"imagem\" ou \"video\". Nada foi gerado.")
+        _dentro_da_pasta(base, i["saida"])
+        for r in i.get("referencias", []) + i.get("imagens", []) + ([i["imagem"]] if i.get("imagem") else []):
+            _dentro_da_pasta(base, r)
+
+
 def plano_do_lote(itens, base):
-    """Itens ainda não gerados (a saída não existe) e o custo em créditos dos vídeos."""
+    """Itens ainda não gerados (a saída não existe) e o custo em créditos dos vídeos. Item já gerado que só
+    falta baixar (marcador) não conta de novo."""
+    validar_lote(itens, base)
     faltam = [i for i in itens if not (Path(base) / i["saida"]).exists()]
     custo = 0
     for i in faltam:
         if i["tipo"] != "video":
+            continue
+        if ler_marcador(Path(base) / i["saida"]):
             continue
         c = custo_conhecido(int(i["segundos"]))
         if c is None:
@@ -815,7 +1077,7 @@ def lote(arquivo, confirmo=False, maximo_total=None):
             formato = formato_padrao(i.get("formato"))
             if i["tipo"] == "imagem":
                 gerar_imagem(i["prompt"], base / nome, [base / r for r in i.get("referencias", [])], formato)
-            else:
+            elif i["tipo"] == "video":
                 imgs = i.get("imagens") or ([i["imagem"]] if i.get("imagem") else [])
                 gerar_video(i["prompt"], [base / x for x in imgs], base / nome, int(i["segundos"]), True,
                             maximo=i.get("max"), formato=formato, baixar=i.get("baixar"))
@@ -840,6 +1102,14 @@ def verificar():
     except SystemExit as e:
         ok = False
         print(f"FALTA  {e}")
+    try:
+        import imageio_ffmpeg  # noqa: F401
+        print("OK  ffmpeg para juntar vídeos (imageio-ffmpeg).")
+    except ImportError:
+        if shutil.which("ffmpeg"):
+            print("OK  ffmpeg para juntar vídeos (do sistema).")
+        else:
+            print("OPCIONAL  ffmpeg, só para juntar vídeos: pip install imageio-ffmpeg")
     logadas = contas_com_login()
     if logadas:
         print(f"OK  Conta(s) com login salvo: {logadas}. Pasta: {CONFIG}")
@@ -874,6 +1144,14 @@ def _argumentos(argv):
             s.add_argument("--confirmo", action="store_true")
             s.add_argument("--max", type=int)
             s.add_argument("--frames", action="store_true")
+    sub.add_parser("fechar")
+    s = sub.add_parser("juntar")
+    s.add_argument("entradas", nargs="+")
+    s.add_argument("--saida", required=True)
+    s.add_argument("--transicao", choices=("corte", "suave"), default="corte")
+    s.add_argument("--musica")
+    s.add_argument("--volume-musica", type=float, default=0.15)
+    s.add_argument("--formato")
     s = sub.add_parser("ampliar")
     s.add_argument("midia")
     s.add_argument("--saida", required=True)
@@ -912,6 +1190,13 @@ def main(argv=None):
         destino = gerar_video(_ler_prompt(a.prompt, a.prompt_arquivo), a.imagem, a.saida, a.segundos, a.confirmo, a.max,
                               "frames" if a.frames else "elementos", formato_padrao(a.formato), a.baixar)
         print(f"Clipe salvo em {destino}")
+    elif a.cmd == "juntar":
+        juntar(a.entradas, a.saida, a.transicao, a.musica, a.volume_musica, a.formato)
+    elif a.cmd == "fechar":
+        for n in contas_com_login():
+            usar(n)
+            _fechar_chrome_da_conta()
+        print("Janela(s) do robô fechada(s). O login continua salvo.")
     elif a.cmd == "ampliar":
         ampliar(a.midia, a.saida, a.confirmo, a.max)
     elif a.cmd == "lote":
