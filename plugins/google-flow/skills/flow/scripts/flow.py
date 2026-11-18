@@ -1287,8 +1287,9 @@ def _slug(texto):
 
 
 def personagens_do_projeto(proj):
-    """Personagens que aparecem em mais de uma cena. Com "foto" (foto real da pessoa), usa a foto; com
-    "prompt_imagem", gera um retrato antes das cenas (personagem_<nome>.jpg), que vira a referência delas."""
+    """Personagens (pessoa, animal, mascote, desenho) que aparecem em mais de uma cena. Com "foto" (imagem
+    enviada), usa como está; com "prompt_imagem", gera a imagem antes das cenas (personagem_<nome>.jpg), que
+    vira a referência delas. Opcional: muitos vídeos não têm personagem."""
     lista = []
     for p in proj.get("personagens", []):
         gerar = not p.get("foto")
@@ -1298,8 +1299,8 @@ def personagens_do_projeto(proj):
 
 
 def itens_do_projeto(proj, etapa):
-    """Itens do lote de uma etapa: "personagens" (só os retratos, para aprovar o rosto antes), "imagens"
-    (retratos que faltam + cenas, 0 crédito) ou "videos" (só depois das imagens aprovadas)."""
+    """Itens do lote de uma etapa: "personagens" (só as imagens deles, para aprovar a aparência antes), "imagens"
+    (personagens que faltam + cenas, 0 crédito) ou "videos" (só depois das imagens aprovadas)."""
     if etapa not in ("personagens", "imagens", "videos"):
         sys.exit("Etapa: personagens, imagens ou videos.")
     fmt = proj.get("formato", "9:16")
@@ -1352,12 +1353,12 @@ def html_storyboard(proj, pasta):
     falta_retrato = [p for p in pers if p["gerar"] and not (pasta / p["imagem"]).exists()]
     for p in pers:
         img = (f'<img src="{e(p["imagem"])}" alt="{e(p.get("nome"))}">' if (pasta / p["imagem"]).exists()
-               else '<div class=vazio>retrato ainda não gerado</div>')
-        origem = ("<p>Foto real enviada: usada como está.</p>" if not p["gerar"]
-                  else f"<h3>Prompt do retrato</h3><pre>{e(p.get('prompt_imagem'))}</pre>")
+               else '<div class=vazio>imagem do personagem ainda não gerada</div>')
+        origem = ("<p>Imagem enviada: usada como está.</p>" if not p["gerar"]
+                  else f"<h3>Prompt da imagem do personagem</h3><pre>{e(p.get('prompt_imagem'))}</pre>")
         blocos.append(f"""<section class="cena personagem"><div class=quadro>{img}</div><div class=texto>
 <h2>Personagem · {e(p.get('nome'))} <small>{e(p['imagem'])} · 0 créditos</small></h2>
-<p>Referência do rosto e da roupa em todas as cenas em que aparece.</p>{origem}</div></section>""")
+<p>Referência da aparência em todas as cenas em que aparece.</p>{origem}</div></section>""")
     for c in r["cenas"]:
         img = (f'<img src="{e(c["imagem"])}" alt="cena {c["n"]}">' if (pasta / c["imagem"]).exists()
                else '<div class=vazio>imagem ainda não gerada</div>')
@@ -1382,7 +1383,7 @@ def html_storyboard(proj, pasta):
     n_img = len(r["cenas"])
     if falta_retrato:
         nomes = ", ".join(str(p.get("nome")) for p in falta_retrato)
-        pergunta_retrato = f"Posso gerar primeiro o retrato de {nomes} (0 créditos), para você aprovar o rosto antes das cenas?"
+        pergunta_retrato = f"Posso gerar primeiro a imagem de {nomes} (0 créditos), para você aprovar a aparência antes das cenas?"
     pergunta = pergunta_retrato if falta_retrato else (f"Aprova as {n_img} imagens? Se sim, os vídeos custam {r['total']} créditos (mostro de novo antes de gerar)."
                 if tem_imagens else f"Posso gerar as {n_img} imagens (0 créditos)?")
     prefs = " · ".join(e(proj.get(k)) for k in ("estilo", "idioma", "musica", "legendas") if proj.get(k))

@@ -5,7 +5,7 @@
 - O vídeo final do `juntar` sai em yuv420p (antes podia sair em yuv444p, que não abre em celular, WhatsApp e Instagram) e com início rápido para a web.
 - O modo Agente do Flow fica sempre desligado: o robô confere ao abrir o projeto e antes de cada pedido (com ele ligado, o pedido vira conversa e não gera). Fecha também o painel lateral.
 - `storyboard --abrir` agora abre de verdade no Windows.
-- **Personagens:** no início do projeto a skill pergunta se há imagens de referência e se alguém aparece em mais de uma cena. Sem foto real, gera primeiro um retrato (0 crédito) para aprovar o rosto, e todas as cenas usam esse retrato como referência (o rosto não vai mudando de cena em cena). Aparece no storyboard como "Personagem". Novo `--itens personagens`.
+- **Personagens (opcional):** no início do projeto a skill pergunta se há imagens de referência e se algum personagem (pessoa, animal, mascote, desenho) aparece em mais de uma cena, sem supor que exista. Sem imagem pronta, gera primeiro a imagem do personagem (0 crédito) para aprovar a aparência, e todas as cenas usam essa mesma referência (ele não vai mudando de cena em cena). Aparece no storyboard como "Personagem". Novo `--itens personagens`.
 - Mensagem fixa de fim da configuração, com exemplos de pedido.
 
 ## 1.3.2 (18/11/2026)

@@ -611,7 +611,7 @@ def test_personagem_sem_foto_nem_prompt_para():
 def test_storyboard_mostra_personagem_e_pede_retrato_primeiro(tmp_path):
     pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
     assert "Personagem · Ana Luíza" in pagina and "Personagem · Dono" in pagina
-    assert "retrato de Ana Luíza" in pagina and "Posso gerar as" not in pagina
+    assert "imagem de Ana Luíza" in pagina and "Posso gerar as" not in pagina
     (tmp_path / "personagem_ana_luiza.jpg").write_bytes(b"x")
     assert "Posso gerar as 1 imagens" in F.html_storyboard(_proj_com_personagem(), tmp_path)
 
