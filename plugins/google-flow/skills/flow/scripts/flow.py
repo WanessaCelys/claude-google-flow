@@ -1491,7 +1491,9 @@ body{{margin:0;background:var(--fundo);color:var(--texto);font:16px/1.55 system-
 main{{max-width:1000px;margin:0 auto;padding:72px 16px 64px}}
 .tarja{{position:fixed;top:0;left:0;right:0;z-index:10;height:44px;background:#2b2b2b;display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 18px}}
 .insta{{display:flex;opacity:.7}}.insta:hover{{opacity:1}}.insta svg{{width:16px;height:16px}}
-.assinatura{{color:#fff;font:400 20px/1 "Great Vibes","Segoe Script","Brush Script MT",cursive;text-decoration:none}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
+.assinatura{{color:#fff;font:400 20px/1 "Great Vibes","Segoe Script","Brush Script MT",cursive;text-decoration:none}}
+.assinatura .por{{font:300 10px/1 system-ui,"Segoe UI",sans-serif;letter-spacing:.14em;text-transform:uppercase;opacity:.75;margin-right:4px;vertical-align:middle}}
+h1{{font-size:24px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em}}.sub{{color:var(--suave);margin:0 0 20px}}
 table{{width:100%;border-collapse:collapse;background:var(--cartao);border:1px solid var(--linha)}}
 th,td{{text-align:left;padding:9px 11px;border-bottom:1px solid var(--linha);font-size:14px;vertical-align:top}}
 th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave)}}tr.t td{{font-weight:700}}.num{{white-space:nowrap}}
@@ -1534,13 +1536,20 @@ ICONE_INSTAGRAM = ('<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-wi
 
 def _assinatura_html(e):
     """Assinatura manuscrita, pequena e branca; com INSTAGRAM, um ícone discreto ao lado leva ao perfil."""
-    texto = f"<span class=assinatura>{e(ASSINATURA)}</span>"
+    por, _, nome = ASSINATURA.partition(" por ")
+    texto = f"<span class=assinatura><span class=por>{e(por)} por</span> {e(nome)}</span>"
     if not INSTAGRAM:
         return texto
     return (f'{texto}<a class=insta href="{e(INSTAGRAM)}" target="_blank" rel="noopener" '
             f'title="Instagram" aria-label="Instagram">{ICONE_INSTAGRAM}</a>')
 
-CORES_REGUA = ("#fdc89b", "#fbb57a", "#fed9b5", "#f9a868", "#fcc08c", "#ffe2c6")  # só tons suaves de laranja
+CORES_REGUA = ("#d97757", "#e8a68a", "#c15f3c", "#f0c4b0", "#cc6b49", "#e39a7f")  # tons de laranja da paleta do Claude
+
+
+def _cor_do_texto(fundo):
+    """Texto branco em laranja escuro, escuro em laranja claro (para ler bem)."""
+    r, g, b = (int(fundo[i:i + 2], 16) for i in (1, 3, 5))
+    return "#fff" if (0.299 * r + 0.587 * g + 0.114 * b) < 150 else "#3d1a0c"
 
 
 def _regua_html(cenas, e):
@@ -1551,7 +1560,8 @@ def _regua_html(cenas, e):
     inicio, segs = 0, []
     for i, c in enumerate(cenas):
         d = int(c.get("segundos", 0))
-        segs.append(f'<div class="seg" style="flex:{max(d, 1)};background:{CORES_REGUA[i % len(CORES_REGUA)]}">'
+        cor = CORES_REGUA[i % len(CORES_REGUA)]
+        segs.append(f'<div class="seg" style="flex:{max(d, 1)};background:{cor};color:{_cor_do_texto(cor)}">'
                     f'<b>Cena {c["n"]}</b><span>{inicio}–{inicio + d} s</span></div>')
         inicio += d
     trans = [c.get("transicao", "corte") for c in cenas[:-1]]
