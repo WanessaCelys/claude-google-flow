@@ -335,6 +335,7 @@ def test_juntar_com_corte_usa_concat_e_normaliza_o_formato():
     filtro = cmd[cmd.index("-filter_complex") + 1]
     assert "concat=n=3:v=1:a=1" in filtro and "scale=720:1280" in filtro and "fps=30" in filtro
     assert cmd[-1] == "f.mp4" and "libx264" in cmd
+    assert cmd[cmd.index("-pix_fmt") + 1] == "yuv420p"  # yuv444p não abre em celular nem no WhatsApp
 
 
 def test_juntar_suave_calcula_os_pontos_da_transicao():
@@ -567,3 +568,16 @@ def test_juntar_de_verdade_com_afastar_e_esmaecer(tmp_path):
     final = tmp_path / "final.mp4"
     F.juntar(clipes, str(final), transicao="afastar,esmaecer-preto", formato="9:16")
     assert final.exists() and final.stat().st_size > 1000
+
+
+def test_falha_nova_ignora_falhas_antigas_e_acha_a_nova():
+    velha = "Falha Esta geração talvez viole nossas políticas. Não houve cobrança por esta geração."
+    assert F.falha_nova([velha], [velha]) is None
+    assert F.falha_nova([], []) is None
+    assert "viole" in F.falha_nova([velha], [velha, velha])
+
+
+def test_falha_nova_tira_nomes_de_icones():
+    bruto = "warning Falha Esta geração talvez viole nossas políticas. Não houve cobrança por esta geração. refresh undo delete_forever"
+    assert F.falha_nova([], [bruto]) == ("Falha Esta geração talvez viole nossas políticas. "
+                                         "Não houve cobrança por esta geração")

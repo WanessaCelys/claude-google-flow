@@ -320,9 +320,24 @@ def _fechar_paineis(pg):
         pg.wait_for_timeout(500)
 
 
+def _desligar_agente(pg):
+    """Contas novas do Flow abrem com o modo Agente ligado e o painel do agente aberto à direita: o pedido iria
+    para o assistente, não direto para a geração. Desliga o Agente e fecha esse painel (visto em 18/11/2026)."""
+    agente = pg.get_by_role("button", name="Agente", exact=True)
+    if agente.count() and agente.first.get_attribute("aria-pressed") == "true":
+        agente.first.click()
+        pg.wait_for_timeout(800)
+    painel = pg.locator("button[aria-label='Fechar']").filter(has_not_text="left_panel_close")
+    if pg.get_by_role("button", name="Iniciar nova sessão").count() and painel.count():
+        painel.first.click()
+        pg.wait_for_timeout(800)
+
+
 def _preparar(pg):
-    """Tela limpa: sem painel aberto, sem busca filtrando a grade, vendo todas as mídias, comando vazio."""
+    """Tela limpa: sem painel aberto, sem busca filtrando a grade, vendo todas as mídias, comando vazio,
+    modo Agente desligado."""
     _fechar_paineis(pg)
+    _desligar_agente(pg)
     limpar = pg.get_by_role("button", name="Limpar entrada da pesquisa")
     if limpar.count() and limpar.first.is_visible():
         limpar.first.click()
@@ -568,6 +583,31 @@ def _mostrar_tipo(pg, tipo):
         pg.wait_for_timeout(2500)
 
 
+# Quadro de falha na grade (ex.: "Falha / Esta geração talvez viole nossas políticas... Não houve cobrança").
+JS_FALHAS = r"""() => [...document.querySelectorAll('flow-grid-tile-container, [role=listitem], div')]
+    .filter(e => /N[ãa]o houve cobran[çc]a/i.test(e.innerText || '') && !e.querySelector('img, video')
+                 && e.children.length < 12 && (e.innerText || '').length < 400)
+    .map(e => (e.innerText || '').trim().replace(/\s+/g, ' '))"""
+
+
+def falha_nova(antes, agora):
+    """Texto da falha que apareceu depois de clicar em gerar (None se não houve). Compara quantas vezes
+    cada texto aparece, porque falhas antigas no mesmo projeto continuam na grade."""
+    novas = Counter(agora) - Counter(antes)
+    texto = next(iter(novas), None)
+    if texto:  # tira os nomes dos ícones que vêm junto no texto do quadro
+        texto = re.sub(r"\b(warning|error|refresh|undo|delete_forever|delete)\b", "", texto)
+        texto = re.sub(r"\s+", " ", texto).strip().rstrip(".")
+    return texto
+
+
+def _falhas(pg):
+    try:
+        return pg.evaluate(JS_FALHAS)
+    except Exception:
+        return []
+
+
 def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
     """tipo: 'image' ou 'video'. Gera, espera aparecer a mídia gerada na grade e baixa o tamanho original.
     Logo que a mídia aparece, grava o marcador: se o download falhar, rodar de novo só baixa, sem gerar
@@ -577,8 +617,10 @@ def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
         print(f"Já gerado antes ({pendente['nome']}): só baixando, sem gerar de novo.")
         _mostrar_tipo(pg, tipo)
         antes, nova = Counter(), {"nome": pendente["nome"], "src": ""}
+        falhas_antes = None
     else:
         antes = contar(pg.evaluate(JS_TILES, tipo))
+        falhas_antes = _falhas(pg)
         _escrever_comando(pg, prompt)
         if conferir_antes:
             conferir_antes()
@@ -590,6 +632,11 @@ def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
             sys.exit("A geração não apareceu na grade a tempo (falhou ou demorou). Confira no Flow antes de tentar de novo.")
         pg.wait_for_timeout(5000)
         voltas += 1
+        if falhas_antes is not None:
+            falha = falha_nova(falhas_antes, _falhas(pg))
+            if falha:
+                sys.exit(f"O Flow recusou esta geração: \"{falha}\" (nada foi cobrado). Mude o pedido "
+                         "(texto ou imagens de referência) e rode de novo")
         if voltas % 12 == 0:  # a grade nem sempre mostra o vídeo novo sem recarregar
             pg.reload()
             pg.wait_for_timeout(8000)
@@ -1130,7 +1177,7 @@ def comando_juntar(ffmpeg, entradas, saida, duracoes, com_audio, transicao="cort
         partes.append("[a][m]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[am]")
         saida_audio = "[am]"
     cmd += ["-filter_complex", ";".join(partes), "-map", "[v]", "-map", saida_audio,
-            "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-c:a", "aac", "-b:a", "192k",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-crf", "18", "-preset", "medium", "-c:a", "aac", "-b:a", "192k",
             "-movflags", "+faststart", str(saida)]
     return cmd
 
@@ -1367,8 +1414,11 @@ def storyboard(arquivo, etapa=None, abrir=False):
         destino.write_text(json.dumps(itens, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"Itens do lote ({etapa}): {destino}")
     if abrir:
-        import webbrowser
-        webbrowser.open(saida.resolve().as_uri())
+        if sys.platform == "win32":
+            os.startfile(str(saida.resolve()))  # o webbrowser não abriu no Windows (visto em 18/11/2026)
+        else:
+            import webbrowser
+            webbrowser.open(saida.resolve().as_uri())
 
 
 TIPOS_DO_LOTE = ("imagem", "video")
