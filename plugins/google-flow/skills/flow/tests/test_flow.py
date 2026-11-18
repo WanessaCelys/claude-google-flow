@@ -627,3 +627,9 @@ def test_copia_de_referencia_e_recusada_mas_imagem_nova_nao():
     assert not F.eh_copia_de_referencia([35.0])     # imagem nova, mesmo personagem em outro cenário
     assert not F.eh_copia_de_referencia([None, 40])  # referência que não deu para comparar
     assert not F.eh_copia_de_referencia([])
+
+
+def test_storyboard_tem_assinatura_fixa(tmp_path):
+    pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
+    assert '<div class=assinatura>criado por Wanessa Celys</div>' in pagina
+    assert "position:fixed" in pagina and "color:#000" in pagina

@@ -1427,7 +1427,8 @@ def html_storyboard(proj, pasta):
 <title>Storyboard · {e(proj.get('titulo'))}</title><style>
 :root{{--fundo:#f6f5f2;--cartao:#fff;--texto:#1f1d1a;--suave:#6b665e;--linha:#e3dfd7;--destaque:#b4531f}}
 body{{margin:0;background:var(--fundo);color:var(--texto);font:16px/1.55 system-ui,"Segoe UI",sans-serif}}
-main{{max-width:1000px;margin:0 auto;padding:32px 16px 64px}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
+main{{max-width:1000px;margin:0 auto;padding:56px 16px 64px}}
+.assinatura{{position:fixed;top:12px;right:16px;z-index:10;color:#000;font-size:13px;font-weight:600;background:rgba(255,255,255,.85);padding:4px 10px;border-radius:999px}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
 table{{width:100%;border-collapse:collapse;background:var(--cartao);border:1px solid var(--linha)}}
 th,td{{text-align:left;padding:9px 11px;border-bottom:1px solid var(--linha);font-size:14px;vertical-align:top}}
 th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave)}}tr.t td{{font-weight:700}}.num{{white-space:nowrap}}
@@ -1447,7 +1448,7 @@ h3{{font-size:12px;text-transform:uppercase;color:var(--suave);margin:12px 0 4px
 pre{{background:#f1efea;border:1px solid var(--linha);border-radius:8px;padding:10px;white-space:pre-wrap;font:12.5px/1.5 Consolas,monospace;margin:0}}
 .pergunta{{margin-top:28px;padding:16px;border:2px solid var(--destaque);border-radius:10px;font-weight:600;background:var(--cartao)}}
 @media(max-width:700px){{.cena{{flex-direction:column}}th:nth-child(4),td:nth-child(4){{display:none}}}}
-</style></head><body><main>
+</style></head><body><div class=assinatura>{e(ASSINATURA)}</div><main>
 <h1>Storyboard: {e(proj.get('titulo'))}</h1>
 <p class=sub>{e(proj.get('formato', '9:16'))} · {r['duracao']} s · {prefs} · download em {e(proj.get('download', '720p'))}</p>
 {regua}
@@ -1455,6 +1456,8 @@ pre{{background:#f1efea;border:1px solid var(--linha);border-radius:8px;padding:
 <tbody>{linhas}<tr class=t><td></td><td>Total</td><td class=num>{r['duracao']} s</td><td>{n_img} imagens: 0</td><td></td><td></td><td class=num>{r['total']}</td></tr></tbody></table>
 {saldo}{''.join(blocos)}<div class=pergunta>{e(pergunta)}</div></main></body></html>"""
 
+
+ASSINATURA = "criado por Wanessa Celys"  # fixa no canto de cima, à direita, em todo storyboard
 
 CORES_REGUA = ("#b4531f", "#2f6f9f", "#5d8a3a", "#8a4fa0", "#c08a1e", "#3d7d7a")
 

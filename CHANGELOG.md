@@ -10,6 +10,7 @@
 - Pergunta de referências simples: "Tem uma ou mais imagens de referência (cenário, personagem como pessoa, avatar, mascote ou animação 3D, produto, logo)?".
 - Correção: logo depois de gerar, a página da mídia às vezes ainda mostra a imagem de referência; o robô baixava essa no lugar da nova. Agora compara o baixado com as referências e espera a imagem nova.
 - Regra de isolamento: cada projeto usa só o que a pessoa mandou para ele.
+- Storyboard com a assinatura "criado por Wanessa Celys" fixa no canto de cima, à direita.
 
 ## 1.3.2 (18/11/2026)
 - Pergunta inicial da resolução mais clara: "Em que resolução você quer baixar os vídeos?", com **720p (recomendado)** primeiro e o custo do 1080p ao lado.
