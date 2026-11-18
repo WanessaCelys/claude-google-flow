@@ -161,11 +161,11 @@ def test_video_so_com_texto_nos_argumentos():
 def test_preferencias_salvar_e_ler(monkeypatch, tmp_path):
     monkeypatch.setattr(F, "CONFIG", tmp_path)
     assert F.ler_preferencias() == {}
-    F.salvar_preferencias({"estilo": "natural", "idioma": "pt-BR", "musica": "depende", "formato": "16:9"})
-    assert F.ler_preferencias()["idioma"] == "pt-BR"
-    F.salvar_preferencias({"musica": "sem"})  # só muda o que veio
+    F.salvar_preferencias({"formato": "16:9", "download": "720p"})
+    assert F.ler_preferencias()["formato"] == "16:9"
+    F.salvar_preferencias({"download": "1080p"})  # só muda o que veio
     p = F.ler_preferencias()
-    assert (p["musica"], p["estilo"]) == ("sem", "natural")
+    assert (p["download"], p["formato"]) == ("1080p", "16:9")
 
 
 def test_formato_padrao_vem_das_preferencias(monkeypatch, tmp_path):
@@ -181,7 +181,9 @@ def test_formato_padrao_vem_das_preferencias(monkeypatch, tmp_path):
 def test_preferencia_invalida_e_recusada(monkeypatch, tmp_path):
     monkeypatch.setattr(F, "CONFIG", tmp_path)
     with pytest.raises(SystemExit):
-        F.salvar_preferencias({"musica": "talvez"})
+        F.salvar_preferencias({"download": "4K"})
+    with pytest.raises(SystemExit):  # estilo, idioma, música e legendas ficam no prompt da pessoa
+        F.salvar_preferencias({"estilo": "natural"})
 
 
 def test_preferencia_de_download_1080p(monkeypatch, tmp_path):
@@ -478,3 +480,62 @@ def test_marcador_com_candidatos_pede_escolha(tmp_path):
     with pytest.raises(SystemExit) as e:
         F.conferir_marcador(F.ler_marcador(saida), saida)
     assert "A" in str(e.value) and "B" in str(e.value) and "nome" in str(e.value)
+
+
+def test_storyboard_mostra_as_referencias_extras(tmp_path):
+    (tmp_path / "cena01.jpg").write_bytes(b"x")
+    (tmp_path / "logo.png").write_bytes(b"x")
+    proj = {"cenas": [{"segundos": 10, "prompt_imagem": "x", "prompt_video": "v", "imagens_extra": ["logo.png"]}]}
+    html = F.html_storyboard(proj, tmp_path)
+    assert 'src="logo.png"' in html and "Referências" in html
+
+
+# ---------- registro de gastos ----------
+
+def test_registra_e_resume_os_gastos():
+    F.registrar_gasto("imagem", 1, 0, "a.jpg")
+    F.registrar_gasto("video", 3, 15, "v.mp4", saldo_depois=81)
+    F.registrar_gasto("1080p", 3, 5, "v_1080p.mp4", saldo_depois=76)
+    r = F.resumo_gastos()
+    assert r["total"] == 20 and r["por_tipo"] == {"imagem": (1, 0), "video": (1, 15), "1080p": (1, 5)}
+    assert r["por_conta"] == {1: 0, 3: 20} and r["ultimo_saldo"] == {3: 76}
+
+
+def test_resumo_vazio_e_por_periodo():
+    assert F.resumo_gastos()["total"] == 0
+    F.registrar_gasto("video", 1, 12, "v.mp4")
+    assert F.resumo_gastos(dias=1)["total"] == 12
+
+
+# ---------- opções de duração e custo (antes do storyboard) ----------
+
+def test_opcoes_para_30_segundos(monkeypatch):
+    monkeypatch.delenv("FLOW_OMNI", raising=False)
+    ops = F.opcoes_de_duracao(30)
+    assert ops[0] == {"clipes": [10, 10, 10], "total": 30, "creditos": 45}
+    assert {"clipes": [8, 8, 8, 6], "total": 30, "creditos": 46} in ops
+    assert {"clipes": [6, 6, 6, 6, 6], "total": 30, "creditos": 50} in ops
+    assert all(o["total"] == 30 for o in ops)  # quando dá exato, só mostra o exato
+
+
+def test_opcoes_quando_nao_da_exato(monkeypatch):
+    monkeypatch.delenv("FLOW_OMNI", raising=False)
+    ops = F.opcoes_de_duracao(25)  # 25 s não fecha com 4/6/8/10: mostra os mais próximos
+    assert ops and all(abs(o["total"] - 25) <= 2 for o in ops)
+    assert {o["total"] for o in ops} <= {24, 26}
+
+
+def test_texto_das_opcoes_mostra_creditos_e_1080p(monkeypatch):
+    monkeypatch.delenv("FLOW_OMNI", raising=False)
+    texto = F.texto_opcoes(30, com_1080p=True)
+    assert "3 vídeos de 10 s" in texto and "45 créditos" in texto and "+15 no 1080p" in texto
+
+
+def test_storyboard_tem_regua_de_tempo(tmp_path):
+    proj = {"titulo": "T", "cenas": [
+        {"segundos": 10, "prompt_video": "a", "transicao": "suave", "descricao": "Um"},
+        {"segundos": 8, "prompt_video": "b", "transicao": "corte", "descricao": "Dois"},
+        {"segundos": 6, "prompt_video": "c", "descricao": "Três"}]}
+    html = F.html_storyboard(proj, tmp_path)
+    assert 'class="regua"' in html and "0–10 s" in html and "10–18 s" in html and "18–24 s" in html
+    assert "Duração final: 23,6 s" in html          # 24 s menos 0,4 s da transição suave

@@ -17,21 +17,22 @@ Duas imagens, 0 créditos. O Claude mostrou o custo antes, gerou, conferiu mãos
 <details>
 <summary><b>In English</b></summary>
 
-A Claude Code plugin that generates images (Nano Banana) and videos (Omni) in Google Flow using your own Chrome, with one command per generation instead of having Claude click through the screen. It asks your preferences on first use, writes prompts from built-in recipes (natural/UGC, corporate, product, motion backgrounds) or uses yours as-is, plans multi-scene projects with a storyboard and batch generation, joins clips into one video with ffmpeg, and **always shows the credit cost and waits for your OK before spending anything**. The skill text is in Portuguese; Claude answers in your language.
+A Claude Code plugin that generates images (Nano Banana) and videos (Omni) in Google Flow using your own Chrome, with one command per generation instead of having Claude click through the screen. You decide the prompts, video length, style and format; it uses your prompts as-is, generates one by one or in batches, shows a visual storyboard with the credit cost of each scene, joins clips into one video with ffmpeg, keeps a log of credits spent and remaining per account, and **always shows the cost and waits for your OK before spending anything**. Optional image prompt recipes (natural phone photo, corporate, product) when you ask Claude to write one. The skill text is in Portuguese; Claude answers in your language.
 
 Install: `/plugin install google-flow --marketplace WanessaCelys/claude-google-flow`. Requirements: Claude Code, Python 3.10+, Google Chrome, a Google account with Flow access. Independent project, not affiliated with Google.
 </details>
 
 ## O que ela faz
 
-- **Imagens e vídeos no Flow** com um comando por geração, sem o Claude ficar clicando na tela passo a passo (gasta bem menos tokens).
-- **Perguntas no primeiro uso:** estilo, idioma da fala, música, legendas, formato, download em 1080p e uso de mais de uma conta. As respostas guiam todos os pedidos seguintes.
-- **Receitas de prompt:** natural (foto e vídeo de celular, UGC, depoimento), institucional, produto e fundos para motion. Se você já tem seus prompts, ela usa o seu texto exatamente como está.
-- **Modo projeto:** para pedidos com várias cenas, monta roteiro e storyboard com o custo, gera as imagens em lote (de graça), espera a sua aprovação e só então gera os vídeos.
-- **Storyboard visual:** em projetos com várias cenas, abre uma página com o roteiro, os prompts, as imagens e o custo de cada cena, para você aprovar antes de gastar.
-- **Clipes de 10 s dirigidos:** o mais barato por segundo; o Claude dirige várias ações e movimentos de câmera dentro de cada clipe.
-- **Juntar os vídeos:** une as cenas num vídeo só, com corte seco ou transições (suave, deslizar, círculo, zoom) em cada junção, aproveitando só o trecho bom de um clipe se precisar, e música de fundo opcional. Roda no seu computador e não gasta crédito.
-- **Vídeos em 720p** (o tamanho original do Flow, recomendado) e, se você quiser, **download em 1080p** (opcional, cobrado à parte pelo Flow).
+Uma ferramenta para gerar no Google Flow **gastando poucos tokens e com os gastos sob controle**. Quem decide os prompts, a duração, o estilo e o formato é você; o Claude usa o que você trouxer exatamente como está e só escreve ou sugere quando você pede.
+
+- **Imagens e vídeos no Flow** com um comando por geração, sem o Claude ficar clicando na tela passo a passo, uma a uma ou em lote.
+- **Opções de duração:** pediu um vídeo de 30 s? Mostra os jeitos de dividir (ex.: 3 vídeos de 10 s = 45 créditos; 3 de 8 s + 1 de 6 s = 46) para você escolher.
+- **Storyboard visual:** em projetos com várias cenas, abre uma página com uma barra de tempo (segundos de cada cena, transições, duração final), os prompts, as imagens e o custo de cada uma, para você aprovar antes de gastar.
+- **Juntar os vídeos:** une as cenas num vídeo só, com corte seco ou transições (suave, deslizar, círculo, zoom) em cada junção, aproveitando só o trecho bom de um clipe se precisar, e música de fundo opcional. Roda no seu computador, sem crédito.
+- **Gastos e créditos:** mostra o custo antes de cada geração, diz quanto sobrou depois e guarda um registro de tudo o que foi gerado (`gastos`), por tipo e por conta.
+- **Vídeos em 720p** (o tamanho original do Flow) e, se você quiser, **download em 1080p** (+5 créditos).
+- **Receitas de prompt de imagem** (opcionais) para quando você pedir que o Claude escreva: foto natural de celular, institucional e produto.
 
 ## Requisitos
 

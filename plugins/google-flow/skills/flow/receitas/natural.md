@@ -1,7 +1,7 @@
-# Receita: natural (foto e vídeo de celular, pessoas reais, UGC)
+# Receita: natural (foto de celular, pessoas reais, UGC)
 
-Use para: anúncio com cara de vídeo de celular, depoimento, diálogo, antes e depois, "foto que parece de iPhone", pessoas comuns em lugares comuns.
-Não use para: peça de marca produzida de propósito, foto de produto em estúdio, fundo de motion.
+Para **imagem**. Use quando a pessoa pedir ao Claude para escrever o prompt de uma foto que pareça de celular: depoimento, flagrante do dia a dia, antes e depois, pessoas comuns em lugares comuns. Prompt pronto da pessoa é usado como está.
+Não use para: peça de marca produzida de propósito, foto de produto em estúdio.
 
 O segredo: o prompt descreve **um flagrante tirado por alguém**, não uma foto produzida. Nada de palavras de estúdio.
 
@@ -43,44 +43,14 @@ Unedited vertical 9:16 iPhone photo taken by her son from a couple of meters awa
 
 **Nunca escreva:** "professional photo", "cinematic", "bokeh", "studio lighting", "8k", "masterpiece", "ultra realistic" (deixam com cara de IA). Nada de texto, logo ou marca na imagem. Roupa gasta ou suja só se a cena pedir.
 
-## Vídeo a partir da imagem (Omni, modo Elementos)
+## Logo ou nome da marca na imagem
 
-A imagem aprovada entra com `--imagem` e é a única referência. Prompt em português mesmo (o Omni entende), nesta ordem:
-1. **Abertura:** "Crie um vídeo em estilo natural UGC de <N> segundos. Use a imagem anexada como única referência dos personagens, das roupas e do cenário, mantenha os traços, as características físicas e as roupas, e desconsidere textos."
-2. **Personagens:** uma descrição curta de cada um (idade, físico, roupa, onde está).
-3. **Cena em ordem:** o que a pessoa faz → a fala dela; a outra pessoa reage → a fala dela. **Nunca** liste todas as ações primeiro e todas as falas depois (a boca e as reações saem trocadas).
-4. **Idioma da fala:** "<Pessoa> fala em <idioma das preferências>, com naturalidade: "<fala>"". Limite: cerca de 4,6 palavras por segundo (8 s ≈ 32 palavras, 10 s ≈ 46, 15 s ≈ 69).
-5. **Câmera e textura depois das falas**, nunca antes: "Câmera de mão parada, plano médio… Texturas naturais, leves poros, filmagem de iPhone." (Câmera descrita antes da cena faz o Omni cortar para outro ângulo.)
-6. **Fecho, conforme as preferências:**
-   - legendas `sem`: "Sem legendas, sem textos na tela."
-   - música `sem`: "Sem música." · `com`: "Com uma música de fundo suave, baixa, que não cobre a fala."
-   - formato: "Formato 9:16." (ou 16:9)
-
-**Marca do cliente no vídeo (importante):** o Omni completa objetos genéricos com a marca mais famosa daquele tipo. "Freezer vermelho e amarelo" virou freezer de sorvete de outra marca, mesmo com a imagem certa anexada. Descreva o objeto **pela marca e pela imagem**: "os freezers da <Marca> exatamente como na imagem anexada, com o logo <Marca> nas laterais", e feche com "sem logotipos de outras marcas, sem freezers ou embalagens de outras marcas". Produto sem embalagem conhecida: "pacote liso, sem marca".
-
-**Antes de juntar, confira cada vídeo quadro a quadro** (1 quadro por segundo): marca trocada, ambiente inventado, objeto que some. Se só uma parte do clipe ficou boa, aproveite o trecho no `juntar` (`clipe.mp4@0-6`) em vez de gerar de novo.
-
-**Truques que evitam erro:**
-- Objetos com nome completo: "latinha de refrigerante prateada, sem marca" (só "latinha" vira marca famosa).
-- Emoção explícita onde importa: "constrangida, sem sorrir".
-- Com 2+ pessoas: quem escuta "fica calado, de boca fechada, só ouvindo" enquanto o outro fala.
-- O que está na mesa ou na mão: "fica na mesa o vídeo todo". Objeto que passa de mão em mão some: deixe cada objeto com uma pessoa só.
-- Alguém ao fundo que acena ou sorri: "olhando para <pessoa>, de perfil para a câmera" (senão acena para a lente).
-- Mão mexendo na roupa por cima da barriga pode trocar o corpo da pessoa: evite e reforce "mesmo rosto e mesmo corpo do começo ao fim".
-
-## Clipe de 10 s dirigido (o padrão)
-
-Em vez de vários clipes curtos e parados, faça um clipe de 10 s com mais de um momento. Escreva as ações **em ordem**, cada uma com o movimento de câmera junto:
-"Ela se abana por causa do calor e diz: "…". Ela aponta para a placa; a câmera sobe acompanhando o dedo até a placa e volta. Ela entra pela porta; a câmera de mão vai atrás dela, revelando a loja da segunda imagem anexada; ela olha em volta, encantada."
-- Movimentos que o Omni entende: câmera acompanha a pessoa, aproxima até o close, se afasta revelando o lugar, sobe/desce, gira em volta, passa de um ângulo para outro.
-- Se o clipe passa por dois ambientes, anexe as duas imagens (personagem/ambiente 1 + ambiente 2) e diga no prompt qual é qual ("a primeira imagem é a fachada, a segunda é o interior").
-- Fala: até cerca de 46 palavras em 10 s, dividida entre os momentos.
-- A descrição de textura e o fecho (legenda, música, formato) continuam no fim.
-
-## Vídeo só com texto (sem `--imagem`)
-
-Mesma estrutura, trocando a abertura por "Crie um vídeo em estilo natural UGC de <N> segundos, filmado com celular." e descrevendo personagens e cenário com o detalhe do prompt de imagem. Sem imagem, a pessoa muda de um clipe para outro: para manter o mesmo personagem em vários clipes, gere a imagem primeiro.
+Quando a marca aparece num objeto (placa, fachada, embalagem, camiseta, crachá):
+1. Anexe **o arquivo do logo** como imagem de referência (`--ref logo.png`), além da foto do lugar.
+2. Diga **qual logo está em qual objeto**: "the shop sign shows the logo from the attached logo image".
+3. Escreva **o texto exato** que aparece ("written <Nome da Marca>"). Sem isso, a IA inventa letras.
+4. Proíba as outras marcas: "no other brand logos". Objeto genérico vira a marca mais famosa daquele tipo de objeto.
 
 ## Conferir antes de aprovar
 
-Mãos (dedos a mais, terceira mão), objeto que some ou muda, texto ou logo na imagem, roupa que troca entre clipes, rosto diferente da referência. Imagem com erro: gere de novo (não gasta crédito). Só imagem aprovada vira vídeo.
+Mãos (dedos a mais, terceira mão), objeto que some ou muda, texto ou logo errado, rosto diferente da referência. Imagem com erro: gere de novo (não gasta crédito). Só imagem aprovada vira vídeo.

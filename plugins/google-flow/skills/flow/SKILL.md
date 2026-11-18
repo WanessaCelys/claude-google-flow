@@ -1,7 +1,7 @@
 ---
 name: flow
 description: >-
-  Gera imagens (Nano Banana) e vídeos (Omni) no Google Flow pelo Chrome da própria pessoa, com um comando por geração. Use sempre que for preciso gerar imagem ou vídeo no Flow, Nano Banana, Omni ou Veo do Flow, uma a uma ou em lote: anúncios, fotos naturais de celular (UGC), cenas institucionais, fotos de produto, fundos para motion, personagens. Na primeira vez, conecta a conta e pergunta as preferências (estilo, idioma da fala, música, legendas, formato, download em 1080p). Confere o saldo, mostra o custo e pede confirmação antes de gastar crédito, e baixa o arquivo.
+  Ferramenta para gerar imagens (Nano Banana) e vídeos (Omni) no Google Flow pelo Chrome da própria pessoa gastando poucos tokens: gera uma a uma ou em lote, monta storyboard para aprovar, junta os vídeos num só e acompanha os gastos e os créditos que sobram em cada conta. Quem decide os prompts, a duração, o estilo e o formato é a pessoa; o Claude só escreve ou sugere prompts quando ela pede. Use sempre que for preciso gerar imagem ou vídeo no Flow, Nano Banana, Omni ou Veo do Flow, montar storyboard, unir vídeos gerados ou saber quanto crédito já foi gasto. Na primeira vez, conecta a conta e pergunta as preferências. Mostra o custo e pede confirmação antes de gastar crédito.
 compatibility: Claude Code no computador da pessoa, com Python 3.10+, Playwright e Google Chrome. Não funciona no claude.ai pelo navegador (precisa abrir o Chrome local).
 ---
 
@@ -9,7 +9,7 @@ compatibility: Claude Code no computador da pessoa, com Python 3.10+, Playwright
 
 Robô que controla o Chrome da própria pessoa, já logado na conta Google dela, e faz os cliques do Flow (projeto, formato, modelo, enviar referência, gerar, esperar, baixar). O Claude dá uma ordem curta e recebe o arquivo pronto, em vez de operar a tela passo a passo (muito mais barato em tokens).
 
-O robô é **só o motor**. O estilo do prompt está nas receitas (`receitas/`), escolhidas pelas preferências da pessoa.
+**Para que serve:** fazer o trabalho braçal do Flow (gerar, esperar, baixar, organizar, juntar) com poucos tokens e com os gastos sob controle. **Quem decide é a pessoa:** os prompts, quanto tempo cada vídeo tem, o estilo e o formato. Os prompts chegam prontos (ela escreveu, ou criou com o Claude na conversa antes de chamar a skill) e são usados exatamente como estão. Para **imagem**, se ela pedir que o Claude escreva, há receitas em `receitas/`. Como o Flow e o Omni funcionam (referências, limite de fala, logo, marca): `referencias/dicas-flow-omni.md`.
 
 ## Primeiro uso (uma vez por computador)
 
@@ -24,35 +24,34 @@ Faça nesta ordem, explicando cada passo em linguagem simples. **Todos os comand
 
 | Pergunta | Opções | Campo |
 |---|---|---|
-| Que estilo você vai gerar mais? | **Natural** (foto e vídeo de celular, pessoas reais, UGC) · **Institucional** (cena corporativa limpa) · **Produto** · **Fundos para motion** · Outro (descreva) | `--estilo natural` (ou `institucional`, `produto`, `fundo-motion`, ou o nome que a pessoa der ao próprio estilo) |
-| Em que idioma as pessoas falam nos vídeos? | Português do Brasil · Inglês · Espanhol · Depende do vídeo | `--idioma pt-BR` / `en-US` / `es` / `depende` |
-| Os vídeos gerados têm música? | Sem música (você põe na edição) · Com música · Depende do vídeo | `--musica sem` / `com` / `depende` |
-| Legenda escrita no vídeo? | Sem (recomendado: o gerador escreve errado; legenda se põe na edição) · Com · Depende | `--legendas sem` / `com` / `depende` |
 | Formato mais usado? | 9:16 (Reels, TikTok) · 16:9 (YouTube, site) · 1:1 · Depende | `--formato 9:16` / `16:9` / `1:1` / `depende` |
 | Baixar os vídeos em 1080p? *(o vídeo em si sempre gasta os créditos da geração; aqui é só o download)* | **Não, 720p (recomendado:** o tamanho original, sem custo extra no download, ótimo para Reels, TikTok e anúncios) · Sim, 1080p (**+5 créditos por vídeo**, além da geração) · Depende do vídeo | `--download 720p` / `1080p` / `depende` |
 | Tem mais de uma conta do Flow e quer que o robô use todas? | Não, só uma (recomendado) · Sim | se sim, siga `referencias/varias-contas.md` |
 
 ```bash
-python flow.py preferencias --estilo natural --idioma pt-BR --musica depende --legendas sem --formato 9:16 --download 720p
+python flow.py preferencias --formato 9:16 --download 720p
 ```
 
 **Na pergunta das várias contas, avise o risco junto com a pergunta, antes da resposta:** os termos do Google costumam proibir automação e o uso de várias contas para somar créditos, e há risco de bloqueio, inclusive da conta paga. A decisão é da pessoa. Se ela disser sim, repita o aviso antes de conectar cada conta nova.
 
-Para mudar depois: o mesmo comando só com o campo que muda. **Quando uma preferência for "depende", pergunte a cada pedido.** Se a pessoa escolher "Outro" estilo, crie com ela uma receita nova em `receitas/<nome>.md` seguindo o formato das outras (estrutura do prompt + fecho + o que evitar) e salve `--estilo <nome>`.
+Para mudar depois: o mesmo comando só com o campo que muda. **Quando uma preferência for "depende", pergunte a cada pedido.**
 
 ## Antes de cada geração
 
 1. Leia as preferências (`flow.py preferencias`).
-2. **A pessoa trouxe o prompt pronto?** Use exatamente o texto dela, sem reescrever, traduzir ou "melhorar": quem conhece o resultado que quer é ela. Só ajuste os parâmetros do comando (formato, duração, referências). Se notar algo que costuma dar erro (texto ou logo pedido na imagem, fala longa demais para a duração, câmera descrita antes da cena), avise em uma linha e pergunte se ela quer mudar. Vários prompts prontos: monte um `lote` com eles, um item por prompt. Se ela usa sempre a mesma estrutura, ofereça guardar como receita própria (`receitas/<nome>.md` + `--estilo <nome>`), para os próximos pedidos sem prompt seguirem o jeito dela.
-3. **Sem prompt pronto:** escreva seguindo a receita do estilo pedido (ou do estilo salvo), com o idioma, a música e as legendas das preferências (ou do que a pessoa disse para este pedido).
-4. **Sempre mostre o custo antes de produzir, em toda geração**, mesmo quando for zero. Uma tabela curta: cada item (imagem ou vídeo), duração, resolução, créditos de cada um, o total e o saldo que sobra (`flow.py saldo`). Imagem aparece como "0 créditos". Só gere depois do ok explícito da pessoa; vídeo só com `--confirmo` depois desse ok.
+2. **Use o prompt da pessoa exatamente como está**, sem reescrever, traduzir ou "melhorar": quem conhece o resultado que quer é ela. Só ajuste os parâmetros do comando (formato, duração, referências). Se notar algo que costuma dar erro (veja `referencias/dicas-flow-omni.md`: texto pedido na imagem, fala longa demais para a duração, marca sem logo anexado), avise em uma linha e pergunte se ela quer mudar. Vários prompts: monte um `lote`, um item por prompt.
+3. **Sem prompt:** peça o prompt. Para **imagem**, se ela pedir que o Claude escreva, use a receita do tipo (`receitas/natural.md` para foto de celular, `institucional.md`, `produto.md`) e mostre o prompt antes de gerar. Prompt de vídeo é dela (ou criado com o Claude na conversa, antes de chamar a skill).
+4. **Duração, formato e estilo são dela.** Se ela não disse a duração de um vídeo, pergunte; mostre a tabela de créditos por duração como informação (10 s é o mais barato por segundo: 1,5 crédito/s), sem escolher por ela.
+5. **Sempre mostre o custo antes de produzir, em toda geração**, mesmo quando for zero. Uma tabela curta: cada item (imagem ou vídeo), duração, resolução, créditos de cada um, o total e o saldo que sobra (`flow.py saldo`). Imagem aparece como "0 créditos". Só gere depois do ok explícito da pessoa; vídeo só com `--confirmo` depois desse ok.
+6. **Depois de gerar, diga quanto gastou e quanto sobrou.** O robô anota cada geração (`flow.py gastos` mostra o acumulado por tipo e por conta; `flow.py saldo`, o saldo de agora).
 
 ## Modo projeto (pedido com várias cenas)
 
-Quando o pedido tem várias cenas ou peças (um comercial, uma leva de criativos, uma sequência de fotos), não gere uma por uma. Siga estas etapas, parando para a aprovação da pessoa onde está marcado. O motivo: imagem não gasta crédito e vídeo gasta, então tudo o que puder ser decidido na imagem é decidido antes de qualquer vídeo.
+Quando o pedido tem várias cenas ou peças (um comercial, uma leva de criativos, uma sequência de fotos), não gere uma por uma. O roteiro, os prompts, as durações e as transições são da pessoa; o trabalho da skill é organizar, mostrar o custo, gerar e juntar. Siga estas etapas, parando para a aprovação dela onde está marcado. O motivo: imagem não gasta crédito e vídeo gasta, então tudo o que puder ser decidido na imagem é decidido antes de qualquer vídeo.
 
-1. **Roteiro:** use **clipes de 10 s por padrão**: é o mais barato por segundo (15 créditos = 1,5/s; 4 s e 6 s custam 1,75 e 1,67/s) e o Omni entende direção. Dentro de cada clipe, dirija **várias ações em ordem, movimentos de câmera e mudanças de ângulo** (a câmera segue a pessoa, sobe até a placa, aproxima até o close), em vez de cortar em vários clipes curtos e parados. Um comercial de 30 s = 3 clipes de 10 s; os cortes e transições ficam entre eles. Clipe mais curto só se a pessoa pedir (ou para fechar um total que não é múltiplo de 10). Cada clipe tem a fala (até cerca de 46 palavras em 10 s) e a imagem de referência; quando o clipe passa por dois ambientes, ponha a imagem do segundo ambiente em `imagens_extra`. A soma fecha o total pedido. Use só frases e promessas que a marca já usa (site, fachada, embalagem); nada de preço ou promessa inventada. Fotos reais do lugar ou do produto entram como `referencias`.
-2. **Storyboard → aprovação (sempre, mesmo que a pessoa não peça):** escreva `<projeto>/projeto.json` (formato em `referencias/storyboard-modelo.md`) e rode `python flow.py storyboard <projeto>/projeto.json --itens imagens --abrir`. Isso cria e abre `storyboard.html` (tabela com créditos, aviso de saldo, cada cena com fala, prompts e transição) e o `itens_imagens.json` do lote. Mostre também o resumo na conversa e espere o ok.
+0. **Duração e divisão (antes do storyboard):** quando a pessoa pede um vídeo de X segundos e ainda não disse como dividir, rode `python flow.py opcoes X` (com `--1080p` se ela baixa em 1080p) e mostre as opções: quantos clipes de quantos segundos, a duração final (a mais próxima, quando não fecha exato) e os créditos de cada uma. Ela escolhe; só depois monte o storyboard.
+1. **Organizar o que a pessoa mandou:** cenas, prompts, durações, imagens de referência e transições vão para o `projeto.json`, sem mudar o conteúdo. Faltou algo (duração de uma cena, qual imagem usar), pergunte.
+2. **Storyboard → aprovação (sempre, mesmo que a pessoa não peça):** escreva `<projeto>/projeto.json` (formato em `referencias/storyboard-modelo.md`) e rode `python flow.py storyboard <projeto>/projeto.json --itens imagens --abrir`. Isso cria e abre `storyboard.html` (barra de tempo no topo com os segundos de cada cena, as transições e a duração final; tabela com créditos; aviso de saldo; cada cena com fala, prompts e transição) e o `itens_imagens.json` do lote. Mostre também o resumo na conversa e espere o ok. A aprovação e os pedidos de mudança são na conversa: para trocar um prompt, uma duração ou uma transição, altere o `projeto.json` e gere o storyboard de novo.
 3. **Imagens em lote:** `python flow.py lote <projeto>/itens_imagens.json`. A cena em que a pessoa aparece melhor vem primeiro e serve de referência para as outras.
 4. **Aprovação das imagens:** rode o `storyboard` de novo (agora com as imagens aparecendo na página), confira mãos, rosto, objetos e texto e pergunte. Refaça só as reprovadas (apague o arquivo e rode o lote de novo: ele pula as que já existem).
 5. **Vídeos em lote:** `python flow.py storyboard <projeto>/projeto.json --itens videos` e `python flow.py lote <projeto>/itens_videos.json --confirmo --max <total aprovado>`, só depois de mostrar de novo o custo dos vídeos e receber o ok.
@@ -81,7 +80,7 @@ python flow.py juntar cena01.mp4 cena02.mp4 cena03.mp4 --saida final.mp4 [--tran
 | Conferir a instalação | `python flow.py verificar` |
 | Conectar a conta | `python flow.py login` |
 | Ver o saldo | `python flow.py saldo` |
-| Ver ou mudar preferências | `python flow.py preferencias [--estilo …] [--idioma …] [--musica …] [--legendas …] [--formato …]` |
+| Ver ou mudar preferências | `python flow.py preferencias [--formato …] [--download …]` |
 | Imagem (sem crédito) | `python flow.py imagem --prompt-arquivo p.txt --saida img.jpg [--ref outra.jpg] [--formato 9:16]` |
 | Vídeo a partir de imagem | `python flow.py video --prompt-arquivo p.txt --imagem img.jpg --saida clipe.mp4 --segundos 8 --confirmo` |
 | Vídeo só com texto | o mesmo, sem `--imagem` |
@@ -90,6 +89,8 @@ python flow.py juntar cena01.mp4 cena02.mp4 cena03.mp4 --saida final.mp4 [--tran
 | Várias de uma vez | `python flow.py lote itens.json [--confirmo] [--max N]` |
 | Storyboard visual + itens do lote (sem crédito) | `python flow.py storyboard projeto.json [--itens imagens\|videos] [--abrir]` |
 | Juntar os clipes num vídeo só (sem crédito) | `python flow.py juntar a.mp4 b.mp4 c.mp4 --saida final.mp4 [--transicao corte,suave]` |
+| Opções de duração e custo para um vídeo de X s | `python flow.py opcoes 30 [--1080p]` |
+| Quanto já gastou (por tipo e por conta) | `python flow.py gastos [--dias 7]` |
 | Fechar a janela do robô no fim do trabalho | `python flow.py fechar` |
 | O Flow mudou a tela | `python flow.py mapear` |
 
@@ -128,17 +129,16 @@ Duração fora da tabela: o robô lê o preço que o Flow mostra e só gera se c
 ## Qualidade: o que faz a diferença
 
 O mesmo prompt gera uma imagem diferente a cada vez; o que se garante é o nível, não a cópia. O nível vem de:
-1. **O prompt seguir a receita** (sobretudo a `natural`, que é o que dá cara de foto de celular de verdade).
+1. **O prompt** (é da pessoa; para foto com cara de celular, a receita `natural`). As notas de `referencias/dicas-flow-omni.md` evitam os erros comuns da ferramenta.
 2. **Mesma pessoa em várias imagens:** passe a imagem já aprovada com `--ref` e comece o prompt com "Same woman/man as in the attached photo…".
 3. **Conferir antes de virar vídeo:** mãos (dedos, terceira mão), objetos que mudam, texto ou logo na imagem, rosto deformado. Errou: gere de novo (imagem não gasta crédito). Só a imagem aprovada vira vídeo.
 
-## Estilos de prompt (receitas)
+## Receitas de prompt de imagem (opcionais)
 
-- `receitas/natural.md`: foto e vídeo de celular, pessoas reais, UGC, depoimento, diálogo, antes e depois.
+Só quando a pessoa pede que o Claude escreva o prompt de uma imagem:
+- `receitas/natural.md`: foto de celular, pessoas reais, UGC, depoimento, antes e depois.
 - `receitas/institucional.md`: cena corporativa limpa, editorial.
 - `receitas/produto.md`: foto de produto em fundo limpo.
-- `receitas/fundo-motion.md`: fundos e texturas para motion e vídeo, sem rosto nem texto.
-- Receitas novas da pessoa ficam na mesma pasta.
 
 ## Várias contas
 

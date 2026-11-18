@@ -6,12 +6,14 @@ clicar na tela passo a passo (um comando por geração, bem menos tokens). Serve
   python flow.py login [2|3]                        # abre o Chrome da conta; a pessoa entra uma vez e deixa aberto
   python flow.py saldo                              # saldo de cada conta com login
   python flow.py mapear [arquivo]                   # lista os botões da tela (para ajustar SELETORES se o Flow mudar)
-  python flow.py preferencias [--estilo natural] [--idioma pt-BR] [--musica depende] [--legendas sem] [--formato 9:16]
+  python flow.py preferencias [--formato 9:16] [--download 720p]
   python flow.py imagem --prompt-arquivo p.txt --saida img.jpg [--ref a.jpg --ref b.jpg] [--formato 9:16]
   python flow.py video  --prompt-arquivo p.txt [--imagem img.jpg] --saida clipe.mp4 --segundos 8 --confirmo [--max N]
                         [--formato 9:16] [--baixar 1080p]   # sem --imagem: so texto; gera sempre em 720p
   python flow.py juntar cena01.mp4@0-6 cena02.mp4 --saida final.mp4 [--transicao suave] [--musica m.mp3]   # sem crédito
   python flow.py storyboard projeto.json [--itens imagens|videos] [--abrir]   # página para aprovar + itens do lote
+  python flow.py opcoes 30 [--1080p]                 # jeitos de dividir um vídeo de 30 s em clipes, com o custo
+  python flow.py gastos [--dias 7]                  # quanto já gastou, por tipo e por conta (registro local)
   python flow.py fechar                             # fecha a janela do robô quando terminar (o login continua salvo)
   python flow.py ampliar <link do vídeo no Flow> --saida clipe_1080p.mp4 --confirmo   # 1080p de um vídeo já gerado
   python flow.py lote itens.json [--confirmo] [--max N]   # várias gerações; pula as que já existem
@@ -630,13 +632,66 @@ def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
     return destino
 
 
+# ---------- registro de gastos (cada geração, com conta, créditos e saldo que sobrou) ----------
+
+def _arq_gastos():
+    return CONFIG / "gastos.jsonl"
+
+
+def registrar_gasto(tipo, conta_n, creditos, arquivo, saldo_depois=None):
+    """Anota uma geração: imagem (0), vídeo ou 1080p. Fica no computador da pessoa (CONFIG/gastos.jsonl)."""
+    linha = {"quando": time.strftime("%Y-%m-%d %H:%M"), "ts": time.time(), "tipo": tipo, "conta": conta_n,
+             "creditos": int(creditos or 0), "arquivo": str(arquivo)}
+    if saldo_depois is not None:
+        linha["saldo_depois"] = int(saldo_depois)
+    _arq_gastos().parent.mkdir(parents=True, exist_ok=True)
+    with _arq_gastos().open("a", encoding="utf-8") as f:
+        f.write(json.dumps(linha, ensure_ascii=False) + "\n")
+
+
+def resumo_gastos(dias=None):
+    """Total gasto, por tipo (quantidade, créditos), por conta e o último saldo conhecido de cada conta."""
+    r = {"total": 0, "por_tipo": {}, "por_conta": {}, "ultimo_saldo": {}, "itens": []}
+    if not _arq_gastos().exists():
+        return r
+    limite = time.time() - dias * 86400 if dias else 0
+    for linha in _arq_gastos().read_text(encoding="utf-8").splitlines():
+        try:
+            g = json.loads(linha)
+        except ValueError:
+            continue
+        if g.get("ts", 0) < limite:
+            continue
+        r["itens"].append(g)
+        r["total"] += g["creditos"]
+        qtd, cred = r["por_tipo"].get(g["tipo"], (0, 0))
+        r["por_tipo"][g["tipo"]] = (qtd + 1, cred + g["creditos"])
+        r["por_conta"][g["conta"]] = r["por_conta"].get(g["conta"], 0) + g["creditos"]
+        if "saldo_depois" in g:
+            r["ultimo_saldo"][g["conta"]] = g["saldo_depois"]
+    return r
+
+
+def mostrar_gastos(dias=None):
+    r = resumo_gastos(dias)
+    periodo = f"nos últimos {dias} dias" if dias else "desde o começo"
+    if not r["itens"]:
+        print(f"Nenhuma geração registrada {periodo}.")
+        return
+    print(f"Gastos {periodo}: {r['total']} créditos")
+    nomes = {"imagem": "imagens", "video": "vídeos", "1080p": "downloads em 1080p"}
+    for tipo, (qtd, cred) in r["por_tipo"].items():
+        print(f"  {qtd} {nomes.get(tipo, tipo)}: {cred} créditos")
+    for c, cred in sorted(r["por_conta"].items()):
+        saldo = r["ultimo_saldo"].get(c)
+        print(f"  conta {c}: gastou {cred}" + (f", sobrou {saldo} na última geração" if saldo is not None else ""))
+    print("Saldo de agora: python flow.py saldo")
+
+
 # ---------- preferências da pessoa (perguntas iniciais) ----------
 
 OPCOES_PREF = {
-    "estilo": None,    # texto livre: natural, institucional, produto, fundo-motion ou o nome de uma receita própria
-    "idioma": None,    # idioma da fala nos vídeos: pt-BR, en-US, es... ou "depende"
-    "musica": ("com", "sem", "depende"),
-    "legendas": ("com", "sem", "depende"),
+    # Só o que a ferramenta usa. Estilo, idioma, música e legendas ficam no prompt da pessoa.
     "formato": ("9:16", "16:9", "1:1", "4:3", "3:4", "depende"),
     "download": ("720p", "1080p", "depende"),  # 1080p = versão ampliada do Flow, cobrada à parte
 }
@@ -772,6 +827,7 @@ def gerar_imagem(prompt, saida, referencias=(), formato="9:16"):
         for i, arq in enumerate(referencias):
             _subir_imagem(pg, arq, limpar=(i == 0))
         destino = _enviar_e_baixar(pg, prompt, "image", saida)
+        registrar_gasto("imagem", ATUAL, 0, destino)
         ctx.close()
     return destino
 
@@ -837,6 +893,7 @@ def gerar_video(prompt, imagens, saida, segundos, confirmo, maximo=None, modo="e
             _subir_imagem(pg, arq, limpar=(i == 0))
         destino = _enviar_e_baixar(pg, prompt, "video", saida,
                                    conferir_antes=lambda: _reconferir_custo(pg, custo, teto_geracao))
+        registrar_gasto("video", n, mostrado, destino, saldo_depois=saldo_atual - mostrado)
         if baixar == "1080p":
             _ir_a_midia(pg, nome=_ULTIMA_MIDIA["nome"])
             _baixar_1080p(pg, saida_1080p(saida))
@@ -917,6 +974,7 @@ def _baixar_1080p(pg, destino):
     if destino.stat().st_size < 500_000:
         sys.exit(f"O arquivo 1080p ficou pequeno demais ({destino.stat().st_size} bytes). Confira no Flow.")
     print(f"1080p salvo em {destino}")
+    registrar_gasto("1080p", ATUAL, CUSTO_1080P, destino)
     return destino
 
 
@@ -1087,6 +1145,47 @@ def juntar(entradas, saida, transicao="corte", musica=None, volume_musica=0.15, 
     return Path(saida)
 
 
+# ---------- opções de duração e custo para um vídeo de X segundos (a pessoa escolhe antes do storyboard) ----------
+
+def opcoes_de_duracao(total, folga=2):
+    """Jeitos de dividir `total` segundos em clipes que o Flow gera, com o custo de cada jeito. Uma opção por
+    quantidade de clipes (a mais barata). Se der para fechar o total exato, só mostra as exatas; senão, as mais
+    próximas (até `folga` segundos de diferença)."""
+    from itertools import combinations_with_replacement
+    tabela = CUSTO_OMNI[os.environ.get("FLOW_OMNI", "1.1")]
+    duracoes = sorted(tabela)
+    melhores = {}
+    for n in range(1, (total + folga) // min(duracoes) + 1):
+        for combo in combinations_with_replacement(sorted(duracoes, reverse=True), n):
+            if len(set(combo)) > 2:  # no máximo dois tamanhos de clipe: fácil de entender e de montar
+                continue
+            soma = sum(combo)
+            dif = abs(soma - total)
+            if dif > folga:
+                continue
+            custo = sum(tabela[d] for d in combo)
+            chave = (dif, custo, max(combo) - min(combo))
+            k = (n, soma)  # uma opção por quantidade de clipes e por duração final (24 s e 26 s aparecem as duas)
+            if k not in melhores or chave < melhores[k][0]:
+                melhores[k] = (chave, {"clipes": list(combo), "total": soma, "creditos": custo})
+    ops = [o for _, o in sorted(melhores.values(), key=lambda x: x[0])]
+    exatas = [o for o in ops if o["total"] == total]
+    escolhidas = exatas or ops
+    return sorted(escolhidas, key=lambda o: (abs(o["total"] - total), o["creditos"], len(o["clipes"])))[:5]
+
+
+def texto_opcoes(total, com_1080p=False):
+    from collections import Counter as _C
+    linhas = [f"Opções para um vídeo de {total} s:"]
+    for i, o in enumerate(opcoes_de_duracao(total), 1):
+        partes = " + ".join(f"{q} vídeo{'s' if q > 1 else ''} de {d} s" for d, q in sorted(_C(o["clipes"]).items(), reverse=True))
+        extra = f" (+{CUSTO_1080P * len(o['clipes'])} no 1080p)" if com_1080p else ""
+        aviso = "" if o["total"] == total else f" · fica com {o['total']} s"
+        linhas.append(f"  {i}. {partes} = {o['total']} s → {o['creditos']} créditos{extra}{aviso}")
+    linhas.append("10 s é o mais barato por segundo; mais clipes curtos = mais cortes e mais custo.")
+    return "\n".join(linhas)
+
+
 # ---------- storyboard (página visual para aprovar) e itens do lote, a partir de projeto.json ----------
 
 def _nome_cena(n, ext):
@@ -1158,6 +1257,11 @@ def html_storyboard(proj, pasta):
     for c in r["cenas"]:
         img = (f'<img src="{e(c["imagem"])}" alt="cena {c["n"]}">' if (pasta / c["imagem"]).exists()
                else '<div class=vazio>imagem ainda não gerada</div>')
+        extras = [x for x in list(c.get("referencias", [])) + list(c.get("imagens_extra", [])) if (pasta / x).exists()]
+        if extras:
+            img += ('<p class=refs>Referências</p><div class=miniaturas>'
+                    + "".join(f'<figure><img src="{e(x)}" alt="{e(x)}"><figcaption>{e(x)}</figcaption></figure>' for x in extras)
+                    + "</div>")
         fala = f'<p><b>Fala:</b> “{e(c["fala"])}”</p>' if c.get("fala") else ""
         blocos.append(f"""<section class=cena><div class=quadro>{img}</div><div class=texto>
 <h2>Cena {c['n']} · {e(c.get('descricao'))} <small>{c.get('segundos', 0)} s · {c['creditos']} créditos</small></h2>{fala}
@@ -1175,6 +1279,7 @@ def html_storyboard(proj, pasta):
     pergunta = (f"Aprova as {n_img} imagens? Se sim, os vídeos custam {r['total']} créditos (mostro de novo antes de gerar)."
                 if tem_imagens else f"Posso gerar as {n_img} imagens (0 créditos)?")
     prefs = " · ".join(e(proj.get(k)) for k in ("estilo", "idioma", "musica", "legendas") if proj.get(k))
+    regua = _regua_html(r["cenas"], e)
     return f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Storyboard · {e(proj.get('titulo'))}</title><style>
 :root{{--fundo:#f6f5f2;--cartao:#fff;--texto:#1f1d1a;--suave:#6b665e;--linha:#e3dfd7;--destaque:#b4531f}}
@@ -1185,9 +1290,15 @@ th,td{{text-align:left;padding:9px 11px;border-bottom:1px solid var(--linha);fon
 th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave)}}tr.t td{{font-weight:700}}.num{{white-space:nowrap}}
 .aviso{{margin:18px 0;padding:12px 14px;background:#fff4e5;border-left:4px solid #e8a33d;border-radius:6px}}
 .ok{{margin:18px 0;padding:12px 14px;background:#ecf8ef;border-left:4px solid #2f9e57;border-radius:6px}}
+.regua{{display:flex;gap:2px;margin:6px 0 4px;height:58px}}.regua .seg{{display:flex;flex-direction:column;justify-content:center;padding:0 8px;color:#fff;border-radius:6px;font-size:12px;line-height:1.3;overflow:hidden;white-space:nowrap}}
+.regua .seg b{{font-size:13px}}.reguaeixo{{display:flex;justify-content:space-between;color:var(--suave);font-size:12px;margin-bottom:6px}}
+.transicoes{{color:var(--suave);font-size:12px;margin:0 0 18px}}.duracao{{font-weight:700;color:var(--texto)}}
 .cena{{display:flex;gap:20px;background:var(--cartao);border:1px solid var(--linha);border-radius:10px;padding:16px;margin-top:20px}}
 .quadro{{flex:0 0 220px}}.quadro img{{width:220px;border-radius:8px;display:block}}
 .vazio{{width:220px;aspect-ratio:9/16;border:2px dashed var(--linha);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--suave);font-size:13px;text-align:center}}
+.refs{{font-size:12px;text-transform:uppercase;color:var(--suave);margin:10px 0 4px}}
+.miniaturas{{display:flex;flex-wrap:wrap;gap:6px;width:220px}}.miniaturas figure{{margin:0;width:68px}}
+.miniaturas img{{width:68px;height:68px;object-fit:cover;border-radius:6px}}.miniaturas figcaption{{font-size:10px;color:var(--suave);word-break:break-all}}
 .texto{{flex:1;min-width:0}}h2{{font-size:17px;margin:0 0 6px}}h2 small{{color:var(--suave);font-weight:400}}
 h3{{font-size:12px;text-transform:uppercase;color:var(--suave);margin:12px 0 4px}}
 pre{{background:#f1efea;border:1px solid var(--linha);border-radius:8px;padding:10px;white-space:pre-wrap;font:12.5px/1.5 Consolas,monospace;margin:0}}
@@ -1196,9 +1307,33 @@ pre{{background:#f1efea;border:1px solid var(--linha);border-radius:8px;padding:
 </style></head><body><main>
 <h1>Storyboard: {e(proj.get('titulo'))}</h1>
 <p class=sub>{e(proj.get('formato', '9:16'))} · {r['duracao']} s · {prefs} · download em {e(proj.get('download', '720p'))}</p>
+{regua}
 <table><thead><tr><th>#</th><th>Cena</th><th>Dur.</th><th>Imagem</th><th>Vídeo</th><th>Transição</th><th>Créditos</th></tr></thead>
 <tbody>{linhas}<tr class=t><td></td><td>Total</td><td class=num>{r['duracao']} s</td><td>{n_img} imagens: 0</td><td></td><td></td><td class=num>{r['total']}</td></tr></tbody></table>
 {saldo}{''.join(blocos)}<div class=pergunta>{e(pergunta)}</div></main></body></html>"""
+
+
+CORES_REGUA = ("#b4531f", "#2f6f9f", "#5d8a3a", "#8a4fa0", "#c08a1e", "#3d7d7a")
+
+
+def _regua_html(cenas, e):
+    """Barra de tempo: cada cena com largura proporcional aos segundos, o início e o fim de cada uma,
+    as transições entre elas e a duração final (cada transição que não é corte sobrepõe 0,4 s)."""
+    if not cenas:
+        return ""
+    inicio, segs = 0, []
+    for i, c in enumerate(cenas):
+        d = int(c.get("segundos", 0))
+        segs.append(f'<div class="seg" style="flex:{max(d, 1)};background:{CORES_REGUA[i % len(CORES_REGUA)]}">'
+                    f'<b>Cena {c["n"]}</b><span>{inicio}–{inicio + d} s</span></div>')
+        inicio += d
+    trans = [c.get("transicao", "corte") for c in cenas[:-1]]
+    final = inicio - TRANSICAO_S * sum(1 for t in trans if t != "corte")
+    juncoes = " · ".join(f"{c['n']}→{c['n'] + 1}: {e(t)}" for c, t in zip(cenas, trans)) or "uma cena só"
+    final_txt = f"{final:.1f}".replace(".", ",").replace(",0", "") if final != int(final) else str(int(final))
+    return (f'<div class="regua">{"".join(segs)}</div>'
+            f'<div class="reguaeixo"><span>0 s</span><span>{inicio} s</span></div>'
+            f'<p class="transicoes">Transições: {juncoes} · <span class="duracao">Duração final: {final_txt} s</span></p>')
 
 
 def storyboard(arquivo, etapa=None, abrir=False):
@@ -1352,6 +1487,11 @@ def _argumentos(argv):
             s.add_argument("--max", type=int)
             s.add_argument("--frames", action="store_true")
     sub.add_parser("fechar")
+    s = sub.add_parser("opcoes")
+    s.add_argument("segundos", type=int)
+    s.add_argument("--1080p", dest="hd", action="store_true")
+    s = sub.add_parser("gastos")
+    s.add_argument("--dias", type=int)
     s = sub.add_parser("storyboard")
     s.add_argument("projeto")
     s.add_argument("--itens", choices=("imagens", "videos"))
@@ -1395,13 +1535,17 @@ def main(argv=None):
             salvar_preferencias(novas)
         prefs = ler_preferencias()
         print(json.dumps(prefs, ensure_ascii=False, indent=2) if prefs else
-              "Sem preferências salvas. Faça as perguntas iniciais (SKILL.md) e salve com: python flow.py preferencias --estilo ...")
+              "Sem preferências salvas. Faça as perguntas iniciais (SKILL.md) e salve com: python flow.py preferencias --formato 9:16 --download 720p")
     elif a.cmd == "imagem":
         print(f"Imagem salva em {gerar_imagem(_ler_prompt(a.prompt, a.prompt_arquivo), a.saida, a.ref, formato_padrao(a.formato))}")
     elif a.cmd == "video":
         destino = gerar_video(_ler_prompt(a.prompt, a.prompt_arquivo), a.imagem, a.saida, a.segundos, a.confirmo, a.max,
                               "frames" if a.frames else "elementos", formato_padrao(a.formato), a.baixar)
         print(f"Clipe salvo em {destino}")
+    elif a.cmd == "opcoes":
+        print(texto_opcoes(a.segundos, a.hd))
+    elif a.cmd == "gastos":
+        mostrar_gastos(a.dias)
     elif a.cmd == "storyboard":
         storyboard(a.projeto, a.itens, a.abrir)
     elif a.cmd == "juntar":

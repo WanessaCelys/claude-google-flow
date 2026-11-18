@@ -1,5 +1,19 @@
 # Histórico de versões
 
+## 1.3.0 (18/11/2026)
+
+**Foco:** a skill é a ferramenta; quem decide os prompts, a duração, o estilo e o formato é a pessoa. Os prompts chegam prontos (escritos por ela ou criados com o Claude na conversa) e são usados como estão.
+
+**Novo**
+- `opcoes 30`: jeitos de dividir um vídeo de X segundos em clipes, com a duração final e os créditos de cada opção, para a pessoa escolher antes do storyboard.
+- Storyboard com barra de tempo no topo: as cenas lado a lado com os segundos, as transições e a duração final.
+- `gastos`: registro local de cada imagem, vídeo e 1080p gerados, com a conta e o saldo que sobrou; depois de gerar, o Claude diz quanto gastou e quanto sobrou.
+- Guia técnico `referencias/dicas-flow-omni.md` (referências, limite de fala, sem texto na tela, marca e logo, conferir antes de juntar).
+
+**Mudou**
+- Receitas só de imagem e opcionais (natural/foto de celular, institucional, produto), usadas apenas quando a pessoa pede que o Claude escreva um prompt de imagem. Saíram as receitas de vídeo e a de fundo para motion.
+- Perguntas iniciais reduzidas ao que a ferramenta usa: formato, download em 1080p e várias contas.
+
 ## 1.2.0 (17/11/2026)
 
 **Novo**
