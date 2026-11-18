@@ -601,6 +601,20 @@ def falha_nova(antes, agora):
     return texto
 
 
+ATIVIDADE_INCOMUM = re.compile(r"atividade incomum|unusual activity", re.I)
+
+
+def mensagem_de_falha(falha):
+    """Recusa por conteúdo: mudar o pedido resolve. Aviso de atividade incomum: é o Google desconfiando de
+    automação; não insista nem tente contornar (risco de bloqueio da conta)."""
+    if ATIVIDADE_INCOMUM.search(falha):
+        return (f"O Flow avisou: \"{falha}\" (nada foi cobrado). É o Google desconfiando de automação. Pare de usar "
+                "o robô nesta conta por algumas horas, não tente de novo em seguida e não tente contornar o aviso: "
+                "insistir aumenta o risco de bloqueio da conta. Se precisar agora, gere à mão no Flow.")
+    return (f"O Flow recusou esta geração: \"{falha}\" (nada foi cobrado). Mude o pedido "
+            "(texto ou imagens de referência) e rode de novo")
+
+
 def _falhas(pg):
     try:
         return pg.evaluate(JS_FALHAS)
@@ -668,8 +682,7 @@ def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None, referencias
         if falhas_antes is not None:
             falha = falha_nova(falhas_antes, _falhas(pg))
             if falha:
-                sys.exit(f"O Flow recusou esta geração: \"{falha}\" (nada foi cobrado). Mude o pedido "
-                         "(texto ou imagens de referência) e rode de novo")
+                sys.exit(mensagem_de_falha(falha))
         if voltas % 12 == 0:  # a grade nem sempre mostra o vídeo novo sem recarregar
             pg.reload()
             pg.wait_for_timeout(8000)
@@ -1346,6 +1359,21 @@ def prompt_final(proj, c, campo):
     return texto
 
 
+CENA_GERADA = re.compile(r"(^|/)cena\d+\.(jpe?g|png|mp4)$", re.I)
+
+
+def referencias_enviadas(proj):
+    """Todas as imagens de referência que a pessoa mandou (cenário, produto, logo...), sem repetir, na ordem em
+    que aparecem nas cenas. Fora: as imagens dos personagens (já têm cartão) e as imagens geradas das cenas."""
+    dos_personagens = {p["imagem"] for p in personagens_do_projeto(proj)}
+    vistas = []
+    for c in proj.get("cenas", []):
+        for r in list(c.get("referencias", [])) + list(c.get("imagens_extra", [])):
+            if r not in vistas and r not in dos_personagens and not CENA_GERADA.search(r):
+                vistas.append(r)
+    return vistas
+
+
 def personagens_do_projeto(proj):
     """Personagens (pessoa, animal, mascote, desenho) que aparecem em mais de uma cena. Com "foto" (imagem
     enviada), usa como está; com "prompt_imagem", gera a imagem antes das cenas (personagem_<nome>.jpg), que
@@ -1417,11 +1445,15 @@ def html_storyboard(proj, pasta):
                else '<div class=vazio>imagem ainda não gerada</div>')
         origem = ("<p>Imagem enviada: usada como está.</p>" if not p["gerar"]
                   else f"<h3>Prompt da imagem</h3><pre>{e(p.get('prompt_imagem'))}</pre>")
-        cartoes.append(f"""<article class=personagem>{img}<h2>{e(p.get('nome'))}</h2>
+        cartoes.append(f"""<article class=personagem>{img}<h2>Personagem · {e(p.get('nome'))}</h2>
 <small>{e(p['imagem'])} · 0 créditos</small>{origem}</article>""")
+    for ref in referencias_enviadas(proj):
+        img = (f'<img src="{e(ref)}" alt="{e(ref)}">' if (pasta / ref).exists()
+               else '<div class=vazio>arquivo não encontrado</div>')
+        cartoes.append(f"<article class=personagem>{img}<h2>{e(Path(ref).stem)}</h2><small>{e(ref)}</small></article>")
     if cartoes:  # num bloco só, no topo, um ao lado do outro, com fundo diferente das cenas
-        blocos.append('<section class=personagens><p class=rotulo>Personagens · referência da aparência '
-                      f'em todas as cenas</p><div class=linha>{"".join(cartoes)}</div></section>')
+        blocos.append('<section class=personagens><p class=rotulo>Imagens de referência · personagens, cenário, '
+                      f'produto, logo</p><div class=linha>{"".join(cartoes)}</div></section>')
     for c in r["cenas"]:
         img = (f'<img src="{e(c["imagem"])}" alt="cena {c["n"]}">' if (pasta / c["imagem"]).exists()
                else '<div class=vazio>imagem ainda não gerada</div>')
@@ -1452,11 +1484,12 @@ def html_storyboard(proj, pasta):
     prefs = " · ".join(e(proj.get(k)) for k in ("estilo", "idioma", "musica", "legendas") if proj.get(k))
     regua = _regua_html(r["cenas"], e)
     return f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Storyboard · {e(proj.get('titulo'))}</title><style>
+<title>Storyboard · {e(proj.get('titulo'))}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap"><style>
 :root{{--fundo:#f6f5f2;--cartao:#fff;--texto:#1f1d1a;--suave:#6b665e;--linha:#e3dfd7;--destaque:#b4531f}}
 body{{margin:0;background:var(--fundo);color:var(--texto);font:16px/1.55 system-ui,"Segoe UI",sans-serif}}
 main{{max-width:1000px;margin:0 auto;padding:56px 16px 64px}}
-.assinatura{{position:fixed;top:12px;right:16px;z-index:10;color:#000;font-size:13px;font-weight:600;background:rgba(255,255,255,.85);padding:4px 10px;border-radius:999px}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
+.assinatura{{position:fixed;top:10px;right:16px;z-index:10;color:#000;font:400 26px/1.1 "Great Vibes","Segoe Script","Brush Script MT",cursive;background:rgba(255,255,255,.85);padding:2px 14px 4px;border-radius:999px;text-decoration:none}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
 table{{width:100%;border-collapse:collapse;background:var(--cartao);border:1px solid var(--linha)}}
 th,td{{text-align:left;padding:9px 11px;border-bottom:1px solid var(--linha);font-size:14px;vertical-align:top}}
 th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave)}}tr.t td{{font-weight:700}}.num{{white-space:nowrap}}
@@ -1479,7 +1512,7 @@ h3{{font-size:12px;text-transform:uppercase;color:var(--suave);margin:12px 0 4px
 pre{{background:#f1efea;border:1px solid var(--linha);border-radius:8px;padding:10px;white-space:pre-wrap;font:12.5px/1.5 Consolas,monospace;margin:0}}
 .pergunta{{margin-top:28px;padding:16px;border:2px solid var(--destaque);border-radius:10px;font-weight:600;background:var(--cartao)}}
 @media(max-width:700px){{.cena{{flex-direction:column}}th:nth-child(4),td:nth-child(4){{display:none}}}}
-</style></head><body><div class=assinatura>{e(ASSINATURA)}</div><main>
+</style></head><body>{_assinatura_html(e)}<main>
 <h1>Storyboard: {e(proj.get('titulo'))}</h1>
 <p class=sub>{e(proj.get('formato', '9:16'))} · {r['duracao']} s · {prefs} · download em {e(proj.get('download', '720p'))}</p>
 {regua}
@@ -1488,7 +1521,15 @@ pre{{background:#f1efea;border:1px solid var(--linha);border-radius:8px;padding:
 {saldo}{''.join(blocos)}<div class=pergunta>{e(pergunta)}</div></main></body></html>"""
 
 
-ASSINATURA = "criado por Wanessa Celys"  # fixa no canto de cima, à direita, em todo storyboard
+ASSINATURA = "criado por Wanessa Celys"  # fixa no canto de cima, à direita, em todo storyboard, letra manuscrita
+INSTAGRAM = ""  # link do Instagram da autora; a assinatura vira link quando preenchido
+
+
+def _assinatura_html(e):
+    texto = e(ASSINATURA)
+    if INSTAGRAM:
+        return f'<a class=assinatura href="{e(INSTAGRAM)}" target="_blank" rel="noopener">{texto}</a>'
+    return f"<div class=assinatura>{texto}</div>"
 
 CORES_REGUA = ("#b4531f", "#2f6f9f", "#5d8a3a", "#8a4fa0", "#c08a1e", "#3d7d7a")
 

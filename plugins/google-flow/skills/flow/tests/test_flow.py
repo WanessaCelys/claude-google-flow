@@ -620,6 +620,8 @@ def test_storyboard_mostra_personagem_e_pede_retrato_primeiro(tmp_path):
 def test_projeto_sem_personagens_continua_igual(tmp_path):
     proj = _proj_com_personagem(); proj.pop("personagens")
     assert [i["saida"] for i in F.itens_do_projeto(proj, "imagens")] == ["cena01.jpg"]
+    assert "Personagem ·" not in F.html_storyboard(proj, tmp_path)
+    proj["cenas"][0]["referencias"] = []  # sem nenhuma imagem enviada, sem bloco de referências
     assert "<section class=personagens>" not in F.html_storyboard(proj, tmp_path)
 
 
@@ -632,8 +634,8 @@ def test_copia_de_referencia_e_recusada_mas_imagem_nova_nao():
 
 def test_storyboard_tem_assinatura_fixa(tmp_path):
     pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
-    assert '<div class=assinatura>criado por Wanessa Celys</div>' in pagina
-    assert "position:fixed" in pagina and "color:#000" in pagina
+    assert "criado por Wanessa Celys" in pagina and "class=assinatura" in pagina
+    assert "position:fixed" in pagina and "color:#000" in pagina and "Great Vibes" in pagina
 
 
 def test_recomenda_ate_um_minuto_sem_limitar():
@@ -660,3 +662,27 @@ def test_sem_alteracao_nao_repete_a_frase():
     proj = _proj_com_personagem(); proj["sem_alteracao"] = True
     proj["cenas"][0]["prompt_imagem"] += " " + F.SEM_ALTERACAO
     assert F.itens_do_projeto(proj, "imagens")[-1]["prompt"].count(F.SEM_ALTERACAO) == 1
+
+
+def test_bloco_laranja_tem_todas_as_referencias_enviadas(tmp_path):
+    proj = _proj_com_personagem()
+    proj["cenas"][0]["referencias"] = ["personagem_ana_luiza.jpg", "ref/fachada.png"]
+    proj["cenas"][0]["imagens_extra"] = ["ref/logo.png", "cena02.jpg"]
+    proj["cenas"].append({"descricao": "b", "segundos": 10, "prompt_imagem": "x", "referencias": ["ref/fachada.png", "cena01.jpg"]})
+    assert F.referencias_enviadas(proj) == ["ref/fachada.png", "ref/logo.png"]  # sem personagem, sem cena gerada, sem repetir
+    pagina = F.html_storyboard(proj, tmp_path)
+    bloco = pagina.split("<section class=personagens>")[1].split("</section>")[0]
+    assert "Personagem · Ana Luíza" in bloco and "ref/fachada.png" in bloco and "ref/logo.png" in bloco
+    assert "cena02.jpg" not in bloco
+
+
+def test_assinatura_vira_link_do_instagram(tmp_path, monkeypatch):
+    monkeypatch.setattr(F, "INSTAGRAM", "https://www.instagram.com/exemplo")
+    pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
+    assert '<a class=assinatura href="https://www.instagram.com/exemplo" target="_blank" rel="noopener">criado por Wanessa Celys</a>' in pagina
+
+
+def test_atividade_incomum_manda_parar_e_nao_mudar_o_pedido():
+    m = F.mensagem_de_falha("Falha Notamos uma atividade incomum. As extensões do navegador podem causar problemas")
+    assert "Pare de usar o robô" in m and "Mude o pedido" not in m
+    assert "Mude o pedido" in F.mensagem_de_falha("Falha Esta geração talvez viole nossas políticas")
