@@ -7,6 +7,9 @@
 - `storyboard --abrir` agora abre de verdade no Windows.
 - **Personagens (opcional):** no início do projeto a skill pergunta se há imagens de referência e se algum personagem (pessoa, animal, mascote, desenho) aparece em mais de uma cena, sem supor que exista. Sem imagem pronta, gera primeiro a imagem do personagem (0 crédito) para aprovar a aparência, e todas as cenas usam essa mesma referência (ele não vai mudando de cena em cena). Aparece no storyboard como "Personagem". Novo `--itens personagens`.
 - Mensagem fixa de fim da configuração, com exemplos de pedido.
+- Pergunta de referências simples: "Tem uma ou mais imagens de referência (cenário, personagem como pessoa, avatar, mascote ou animação 3D, produto, logo)?".
+- Correção: logo depois de gerar, a página da mídia às vezes ainda mostra a imagem de referência; o robô baixava essa no lugar da nova. Agora compara o baixado com as referências e espera a imagem nova.
+- Regra de isolamento: cada projeto usa só o que a pessoa mandou para ele.
 
 ## 1.3.2 (18/11/2026)
 - Pergunta inicial da resolução mais clara: "Em que resolução você quer baixar os vídeos?", com **720p (recomendado)** primeiro e o custo do 1080p ao lado.

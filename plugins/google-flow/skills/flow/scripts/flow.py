@@ -608,7 +608,39 @@ def _falhas(pg):
         return []
 
 
-def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
+JS_DIFERENCA = r"""async ([a, b]) => {
+    const px = async (src) => { const i = new Image(); i.src = src; await i.decode();
+        const c = document.createElement('canvas'); c.width = 24; c.height = 24;
+        const x = c.getContext('2d'); x.drawImage(i, 0, 0, 24, 24); return x.getImageData(0, 0, 24, 24).data; };
+    const [p, q] = [await px(a), await px(b)]; let soma = 0;
+    for (let k = 0; k < p.length; k += 4) soma += Math.abs(p[k]-q[k]) + Math.abs(p[k+1]-q[k+1]) + Math.abs(p[k+2]-q[k+2]);
+    return soma / (p.length / 4 * 3); }"""
+DIFERENCA_MINIMA = 4  # média 0–255 numa miniatura 24x24: abaixo disso é a mesma imagem (só recomprimida)
+
+
+def _data_url(corpo, tipo="image/jpeg"):
+    import base64
+    return f"data:{tipo};base64,{base64.b64encode(corpo).decode()}"
+
+
+def eh_copia_de_referencia(diferencas):
+    """Logo depois de gerar, a página da mídia às vezes ainda mostra a imagem de referência no lugar da nova
+    (visto em 18/11/2026). Se o baixado é praticamente igual a uma referência, não é a imagem gerada."""
+    return any(d is not None and d < DIFERENCA_MINIMA for d in diferencas)
+
+
+def _diferencas(pg, corpo, referencias):
+    out = []
+    for r in referencias or ():
+        try:
+            tipo = "image/png" if str(r).lower().endswith(".png") else "image/jpeg"
+            out.append(pg.evaluate(JS_DIFERENCA, [_data_url(corpo), _data_url(Path(r).read_bytes(), tipo)]))
+        except Exception:
+            out.append(None)
+    return out
+
+
+def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None, referencias=()):
     """tipo: 'image' ou 'video'. Gera, espera aparecer a mídia gerada na grade e baixa o tamanho original.
     Logo que a mídia aparece, grava o marcador: se o download falhar, rodar de novo só baixa, sem gerar
     (e sem gastar) outra vez. `conferir_antes` roda depois de escrever o pedido e antes de clicar em gerar."""
@@ -667,6 +699,9 @@ def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
         resposta = pg.request.get(link)
         corpo = resposta.body() if resposta.ok else b""
         if baixado_ok(tipo, corpo, resposta.headers.get("content-type")):
+            if tipo == "image" and eh_copia_de_referencia(_diferencas(pg, corpo, referencias)):
+                corpo = b""
+                continue  # a página ainda mostra a referência: espera a imagem nova carregar
             break
     else:
         sys.exit(f"A mídia ({nova['nome']}) foi gerada mas não baixou inteira. Rode o mesmo comando de novo: "
@@ -874,7 +909,7 @@ def gerar_imagem(prompt, saida, referencias=(), formato="9:16"):
         _configurar(pg, ["aba_imagem", "formato", "nano", "x1"], 0)
         for i, arq in enumerate(referencias):
             _subir_imagem(pg, arq, limpar=(i == 0))
-        destino = _enviar_e_baixar(pg, prompt, "image", saida)
+        destino = _enviar_e_baixar(pg, prompt, "image", saida, referencias=referencias)
         registrar_gasto("imagem", ATUAL, 0, destino)
         ctx.close()
     return destino

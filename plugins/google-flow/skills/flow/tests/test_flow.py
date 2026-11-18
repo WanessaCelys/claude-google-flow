@@ -620,3 +620,10 @@ def test_projeto_sem_personagens_continua_igual(tmp_path):
     proj = _proj_com_personagem(); proj.pop("personagens")
     assert [i["saida"] for i in F.itens_do_projeto(proj, "imagens")] == ["cena01.jpg"]
     assert "Personagem ·" not in F.html_storyboard(proj, tmp_path)
+
+
+def test_copia_de_referencia_e_recusada_mas_imagem_nova_nao():
+    assert F.eh_copia_de_referencia([1.2])          # mesma imagem recomprimida
+    assert not F.eh_copia_de_referencia([35.0])     # imagem nova, mesmo personagem em outro cenário
+    assert not F.eh_copia_de_referencia([None, 40])  # referência que não deu para comparar
+    assert not F.eh_copia_de_referencia([])
