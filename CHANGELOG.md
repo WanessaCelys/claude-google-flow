@@ -1,5 +1,8 @@
 # Histórico de versões
 
+## 1.3.2 (18/11/2026)
+- Pergunta inicial da resolução mais clara: "Em que resolução você quer baixar os vídeos?", com **720p (recomendado)** primeiro e o custo do 1080p ao lado.
+
 ## 1.3.1 (18/11/2026)
 - Transições clássicas no `juntar`: suave, esmaecer-preto, esmaecer-branco, deslizar-esquerda, deslizar-direita, aproximar e afastar (este feito sob medida: a cena encolhe até o centro e revela a próxima). Os nomes antigos (deslizar, zoom, círculo) continuam aceitos.
 

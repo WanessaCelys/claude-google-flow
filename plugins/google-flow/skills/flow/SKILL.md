@@ -25,7 +25,7 @@ Faça nesta ordem, explicando cada passo em linguagem simples. **Todos os comand
 | Pergunta | Opções | Campo |
 |---|---|---|
 | Formato mais usado? | 9:16 (Reels, TikTok) · 16:9 (YouTube, site) · 1:1 · Depende | `--formato 9:16` / `16:9` / `1:1` / `depende` |
-| Baixar os vídeos em 1080p? *(o vídeo em si sempre gasta os créditos da geração; aqui é só o download)* | **Não, 720p (recomendado:** o tamanho original, sem custo extra no download, ótimo para Reels, TikTok e anúncios) · Sim, 1080p (**+5 créditos por vídeo**, além da geração) · Depende do vídeo | `--download 720p` / `1080p` / `depende` |
+| Em que resolução você quer baixar os vídeos? | **720p (recomendado)**: o tamanho original do Flow, sem custo extra, ótimo para Reels, TikTok e anúncios · **1080p**: +5 créditos por vídeo, além dos créditos da geração · **Depende do vídeo** | `--download 720p` / `1080p` / `depende` |
 | Tem mais de uma conta do Flow e quer que o robô use todas? | Não, só uma (recomendado) · Sim | se sim, siga `referencias/varias-contas.md` |
 
 ```bash
