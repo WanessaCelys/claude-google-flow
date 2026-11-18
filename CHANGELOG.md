@@ -1,81 +1,20 @@
 # Histórico de versões
 
-## 1.3.4 (18/11/2026)
-- Duração: não há limite para o vídeo final; o recomendado é até 1 minuto. As opções de divisão avisam quando passa disso, sem impedir.
-- Correção no Windows: os comandos quebravam ou mostravam acentos errados no terminal (ex.: `opcoes`); agora a saída é sempre UTF-8.
-- `sem_alteracao`: quando a pessoa quer o mesmo personagem e o mesmo cenário das imagens enviadas, sem mudança, o robô acrescenta ao prompt "use only the attached images as reference…". O storyboard mostra o prompt já com a frase.
-- Storyboard: os personagens ficam num bloco só, acima das cenas, um ao lado do outro, com fundo laranja suave (80%) para diferenciar dos cartões de cena.
+## 1.0.0 (18/11/2026)
 
-## 1.3.3 (18/11/2026)
-- Quando o Flow recusa uma geração ("talvez viole nossas políticas"), o robô percebe em segundos e mostra o aviso, em vez de esperar 8 minutos. Orientação na skill do que fazer.
-- O vídeo final do `juntar` sai em yuv420p (antes podia sair em yuv444p, que não abre em celular, WhatsApp e Instagram) e com início rápido para a web.
-- O modo Agente do Flow fica sempre desligado: o robô confere ao abrir o projeto e antes de cada pedido (com ele ligado, o pedido vira conversa e não gera). Fecha também o painel lateral.
-- `storyboard --abrir` agora abre de verdade no Windows.
-- **Personagens (opcional):** no início do projeto a skill pergunta se há imagens de referência e se algum personagem (pessoa, animal, mascote, desenho) aparece em mais de uma cena, sem supor que exista. Sem imagem pronta, gera primeiro a imagem do personagem (0 crédito) para aprovar a aparência, e todas as cenas usam essa mesma referência (ele não vai mudando de cena em cena). Aparece no storyboard como "Personagem". Novo `--itens personagens`.
-- Mensagem fixa de fim da configuração, com exemplos de pedido.
-- Pergunta de referências simples: "Tem uma ou mais imagens de referência (cenário, personagem como pessoa, avatar, mascote ou animação 3D, produto, logo)?".
-- Correção: logo depois de gerar, a página da mídia às vezes ainda mostra a imagem de referência; o robô baixava essa no lugar da nova. Agora compara o baixado com as referências e espera a imagem nova.
-- Regra de isolamento: cada projeto usa só o que a pessoa mandou para ele.
-- Storyboard com a assinatura "criado por Wanessa Celys" fixa no canto de cima, à direita.
+Primeira versão pública.
 
-## 1.3.2 (18/11/2026)
-- Pergunta inicial da resolução mais clara: "Em que resolução você quer baixar os vídeos?", com **720p (recomendado)** primeiro e o custo do 1080p ao lado.
+**A ferramenta:** gera imagens (Nano Banana) e vídeos (Omni) no Google Flow pelo Chrome da própria pessoa, gastando poucos tokens. Quem decide os prompts, a duração, o estilo e o formato é a pessoa; os prompts são usados exatamente como ela mandar.
 
-## 1.3.1 (18/11/2026)
-- Transições clássicas no `juntar`: suave, esmaecer-preto, esmaecer-branco, deslizar-esquerda, deslizar-direita, aproximar e afastar (este feito sob medida: a cena encolhe até o centro e revela a próxima). Os nomes antigos (deslizar, zoom, círculo) continuam aceitos.
-
-## 1.3.0 (18/11/2026)
-
-**Foco:** a skill é a ferramenta; quem decide os prompts, a duração, o estilo e o formato é a pessoa. Os prompts chegam prontos (escritos por ela ou criados com o Claude na conversa) e são usados como estão.
-
-**Novo**
-- `opcoes 30`: jeitos de dividir um vídeo de X segundos em clipes, com a duração final e os créditos de cada opção, para a pessoa escolher antes do storyboard.
-- Storyboard com barra de tempo no topo: as cenas lado a lado com os segundos, as transições e a duração final.
-- `gastos`: registro local de cada imagem, vídeo e 1080p gerados, com a conta e o saldo que sobrou; depois de gerar, o Claude diz quanto gastou e quanto sobrou.
-- Guia técnico `referencias/dicas-flow-omni.md` (referências, limite de fala, sem texto na tela, marca e logo, conferir antes de juntar).
-
-**Mudou**
-- Receitas só de imagem e opcionais (natural/foto de celular, institucional, produto), usadas apenas quando a pessoa pede que o Claude escreva um prompt de imagem. Saíram as receitas de vídeo e a de fundo para motion.
-- Perguntas iniciais reduzidas ao que a ferramenta usa: formato, download em 1080p e várias contas.
-
-## 1.2.0 (17/11/2026)
-
-**Novo**
-- `storyboard`: página visual do projeto (tabela com créditos, aviso de saldo, cada cena com fala, prompts, transição e a imagem quando já existe) e os itens do lote de cada etapa, a partir de um `projeto.json`. No modo projeto é gerado sempre, mesmo sem a pessoa pedir.
-- `juntar`: uma transição por junção (`corte,deslizar,suave`), novas transições (deslizar, círculo, zoom) e trecho de um clipe (`cena01.mp4@0-6`).
-- Clipes de 10 s por padrão, com várias ações e movimentos de câmera dirigidos dentro do clipe (mais barato por segundo).
-- Vídeo com mais de uma imagem de referência (`imagens_extra`), para o clipe que passa por dois ambientes.
-
-**Corrigido**
-- Imagem passa a usar a conta escolhida (antes, sempre a conta 1).
-- `juntar` com corte seguido de transição falhava (base de tempo); agora funciona, com teste que roda o ffmpeg de verdade. Em falha, não deixa arquivo final quebrado.
-- Duas mídias novas ao mesmo tempo no projeto (outra pessoa gerando): o robô para e pergunta qual é a sua, em vez de baixar a errada.
-- Receita natural: o Omni troca a marca do cliente pela marca famosa do mesmo tipo de objeto; agora o prompt trava a marca e proíbe logos de outras marcas, e cada vídeo é conferido antes de juntar.
-
-## 1.1.0 (17/11/2026)
-
-**Novo**
-- `juntar`: une os clipes num vídeo só, com corte seco ou transição suave e música de fundo opcional. Roda no computador, sem crédito (ffmpeg via `pip install imageio-ffmpeg`).
-- `fechar`: fecha a janela do robô no fim do trabalho (o login continua salvo).
-- `verificar` mostra se o ffmpeg para juntar vídeos está instalado.
-
-**Corrigido**
-- Imagens: desde 17/11/2026 o Flow mostra só uma miniatura WebP na grade. O robô agora abre a imagem e baixa o tamanho original (1K, JPEG).
-
-**Segurança** (auditoria independente)
-- Lote recusa tipo desconhecido (`"Video"`, `"image"`…) antes de qualquer gasto: antes, um tipo escrito errado podia gerar vídeo sem confirmação.
-- O `--max` passa a incluir os +5 créditos do 1080p.
-- Gerou mas não baixou: rodar de novo só baixa, sem gerar e gastar outra vez (marcador `<saida>.gerado.json`).
-- O custo é conferido de novo logo antes de clicar em gerar.
-- O robô só se conecta ao Chrome do perfil dele: recusa outro Chrome ou programa na mesma porta.
-- Caminhos do lote só dentro da pasta do projeto; nenhum comando sobrescreve arquivo existente; `ampliar` só aceita links do Flow.
-- Fechar a janela de uma conta não fecha mais as das outras contas.
-- Envio de imagens por pasta temporária própria, sempre apagada.
-- Os testes nunca abrem o navegador.
-
-## 1.0.1 (17/11/2026)
-- Vídeo sempre gerado em 720p (o tamanho original, recomendado); saiu a opção de 360p.
-- Texto mais claro: 720p não tem custo extra no download, mas o vídeo sempre gasta os créditos da geração.
-
-## 1.0.0 (16/11/2026)
-- Primeira versão pública: perguntas iniciais, receitas de prompt, modo projeto com storyboard e lote, download em 1080p, vídeo só com texto, várias contas (opcional, com aviso de risco) e custo mostrado antes de qualquer geração.
+- **Primeiro uso:** conecta a conta (a pessoa faz o login; o Claude nunca digita senha), avisa o risco de bloqueio com os termos do Google e faz 3 perguntas: formato, resolução de download (720p recomendado; 1080p custa +5 créditos por vídeo) e se usa uma ou várias contas. Termina com uma mensagem fixa com exemplos de pedido.
+- **Custos sob controle:** mostra a tabela de créditos antes de qualquer geração, mesmo quando é zero, e só gera vídeo depois do ok (`--confirmo`, com teto). Confere o preço no menu do Flow antes de clicar. Registra cada gasto (`gastos`) e mostra o saldo (`saldo`).
+- **Duração:** `opcoes X` mostra os jeitos de dividir um vídeo de X segundos em clipes, com o custo de cada um. Não há limite de duração; o recomendado é até 1 minuto.
+- **Modo projeto e storyboard:** a pessoa aprova tudo numa página antes de gastar. Barra de tempo com as cenas em tons de laranja, transições e duração final; tabela de créditos; aviso de saldo; bloco com todas as imagens de referência enviadas (personagens, cenário, produto, logo); cada cena com imagem, fala, prompts e transição. Tarja no topo com a assinatura da autora.
+- **Personagens (opcional):** pessoa, avatar, animal, mascote ou desenho que aparece em várias cenas. Com imagem enviada, usa como está; sem imagem, gera primeiro a imagem do personagem (0 crédito) para aprovar a aparência, e todas as cenas usam essa mesma referência.
+- **Sem alteração:** quando a pessoa quer o mesmo personagem e o mesmo cenário das imagens enviadas, o robô acrescenta ao prompt "use only the attached images as reference…".
+- **Juntar os vídeos (sem crédito):** transições clássicas (corte, suave, esmaecer preto ou branco, deslizar para a esquerda ou a direita, aproximar, afastar), trechos de um clipe (`clipe.mp4@0-6`) e música opcional. O vídeo final sai em H.264 yuv420p, que abre em celular, WhatsApp e Instagram.
+- **Receitas de prompt de imagem** (só quando a pessoa pede ao Claude para escrever): foto natural de celular, institucional e produto.
+- **Proteções:** não gera duas vezes nem cobra de novo se o download falhar (marcador); não sobrescreve arquivo; não adivinha quando aparecem duas mídias novas ao mesmo tempo; não baixa a imagem de referência no lugar da nova; desliga o modo Agente do Flow; recusa porta de outro Chrome.
+- **Quando o Flow recusa:** o robô percebe em segundos e mostra o aviso (nada é cobrado). Se o aviso for de "atividade incomum", manda parar e não tentar contornar.
+- **Isolamento:** cada projeto usa só o que a pessoa mandou para ele. Tudo fica no computador dela; o robô só fala com o Google Flow.
+- **Várias contas** (opcional, com aviso de risco).
