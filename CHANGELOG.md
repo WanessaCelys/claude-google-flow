@@ -3,7 +3,7 @@
 ## 1.3.3 (18/11/2026)
 - Quando o Flow recusa uma geração ("talvez viole nossas políticas"), o robô percebe em segundos e mostra o aviso, em vez de esperar 8 minutos. Orientação na skill do que fazer.
 - O vídeo final do `juntar` sai em yuv420p (antes podia sair em yuv444p, que não abre em celular, WhatsApp e Instagram) e com início rápido para a web.
-- Desliga o modo Agente do Flow e fecha o painel lateral quando a conta nova abre com eles ligados.
+- O modo Agente do Flow fica sempre desligado: o robô confere ao abrir o projeto e antes de cada pedido (com ele ligado, o pedido vira conversa e não gera). Fecha também o painel lateral.
 - `storyboard --abrir` agora abre de verdade no Windows.
 
 ## 1.3.2 (18/11/2026)

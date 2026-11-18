@@ -621,6 +621,7 @@ def _enviar_e_baixar(pg, prompt, tipo, destino, conferir_antes=None):
     else:
         antes = contar(pg.evaluate(JS_TILES, tipo))
         falhas_antes = _falhas(pg)
+        _desligar_agente(pg)  # o Agente sempre desligado: com ele ligado o pedido vira conversa e não gera
         _escrever_comando(pg, prompt)
         if conferir_antes:
             conferir_antes()
