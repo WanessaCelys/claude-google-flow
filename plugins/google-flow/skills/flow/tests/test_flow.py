@@ -611,7 +611,7 @@ def test_personagem_sem_foto_nem_prompt_para():
 def test_storyboard_mostra_personagem_e_pede_retrato_primeiro(tmp_path):
     pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
     assert "<section class=personagens>" in pagina and pagina.count("<article class=personagem>") == 2
-    assert "Ana Luíza" in pagina and "Dono" in pagina and "rgba(240,128,40,.8)" in pagina
+    assert "Ana Luíza" in pagina and "Dono" in pagina and "rgba(250,190,140,.8)" in pagina
     assert "imagem de Ana Luíza" in pagina and "Posso gerar as" not in pagina
     (tmp_path / "personagem_ana_luiza.jpg").write_bytes(b"x")
     assert "Posso gerar as 1 imagens" in F.html_storyboard(_proj_com_personagem(), tmp_path)

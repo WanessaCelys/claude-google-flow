@@ -1446,7 +1446,7 @@ th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave
 .regua{{display:flex;gap:2px;margin:6px 0 4px;height:58px}}.regua .seg{{display:flex;flex-direction:column;justify-content:center;padding:0 8px;color:#fff;border-radius:6px;font-size:12px;line-height:1.3;overflow:hidden;white-space:nowrap}}
 .regua .seg b{{font-size:13px}}.reguaeixo{{display:flex;justify-content:space-between;color:var(--suave);font-size:12px;margin-bottom:6px}}
 .transicoes{{color:var(--suave);font-size:12px;margin:0 0 18px}}.duracao{{font-weight:700;color:var(--texto)}}
-.personagens{{margin-top:20px;padding:16px;border-radius:10px;background:rgba(240,128,40,.8)}}
+.personagens{{margin-top:20px;padding:16px;border-radius:10px;background:rgba(250,190,140,.8)}}
 .personagens .rotulo{{margin:0 0 10px;font-weight:700;color:#1f1d1a}}.personagens .linha{{display:flex;flex-wrap:wrap;gap:12px}}
 .personagem{{flex:0 1 220px;background:var(--cartao);border-radius:8px;padding:10px}}.personagem img,.personagem .vazio{{width:100%;border-radius:6px;display:block}}
 .personagem h2{{font-size:16px;margin:8px 0 0}}.personagem small{{color:var(--suave);font-size:12px}}.personagem pre{{font-size:11.5px}}.cena{{display:flex;gap:20px;background:var(--cartao);border:1px solid var(--linha);border-radius:10px;padding:16px;margin-top:20px}}

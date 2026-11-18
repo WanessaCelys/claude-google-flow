@@ -3,7 +3,7 @@
 ## 1.3.4 (18/11/2026)
 - Duração: não há limite para o vídeo final; o recomendado é até 1 minuto. As opções de divisão avisam quando passa disso, sem impedir.
 - Correção no Windows: os comandos quebravam ou mostravam acentos errados no terminal (ex.: `opcoes`); agora a saída é sempre UTF-8.
-- Storyboard: os personagens ficam num bloco só, acima das cenas, um ao lado do outro, com fundo laranja (80%) para diferenciar dos cartões de cena.
+- Storyboard: os personagens ficam num bloco só, acima das cenas, um ao lado do outro, com fundo laranja suave (80%) para diferenciar dos cartões de cena.
 
 ## 1.3.3 (18/11/2026)
 - Quando o Flow recusa uma geração ("talvez viole nossas políticas"), o robô percebe em segundos e mostra o aviso, em vez de esperar 8 minutos. Orientação na skill do que fazer.
