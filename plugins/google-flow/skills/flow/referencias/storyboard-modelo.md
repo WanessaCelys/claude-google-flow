@@ -29,6 +29,7 @@ O storyboard é sempre gerado no modo projeto, mesmo que a pessoa não peça: é
   ]
 }
 ```
+- `sem_alteracao` (opcional, no projeto ou na cena): `true` quando a pessoa quer o mesmo personagem e o mesmo cenário das imagens enviadas, sem mudança. O robô acrescenta no fim do prompt de imagem e de vídeo a frase que pede para usar só as imagens enviadas como referência.
 - `personagens` (opcional, só se houver): o que aparece em mais de uma cena e precisa ficar igual (pessoa, animal, mascote, desenho). Com `foto`, usa a imagem enviada; com `prompt_imagem`, gera `personagem_<nome>.jpg` antes das cenas (0 crédito) e aparece no storyboard como "Personagem", para aprovar a aparência. As cenas usam esse arquivo em `referencias`.
 - As cenas viram `cena01.jpg`/`cena01.mp4`, `cena02…` na ordem. Referências são caminhos dentro da pasta do projeto (fotos reais em `ref/`, imagens de cenas anteriores pelo nome).
 - `transicao` é a passagem **para a próxima** cena: `corte`, `suave`, `esmaecer-preto`, `esmaecer-branco`, `deslizar-esquerda`, `deslizar-direita`, `aproximar` ou `afastar`. A última cena não precisa.

@@ -641,3 +641,22 @@ def test_recomenda_ate_um_minuto_sem_limitar():
     longo = F.texto_opcoes(90)
     assert "Não há limite" in longo and "até 60 s" in longo
     assert F.opcoes_de_duracao(180)  # vídeo longo continua tendo opções
+
+
+def test_sem_alteracao_acrescenta_a_frase_no_fim_do_prompt(tmp_path):
+    proj = _proj_com_personagem()
+    assert F.SEM_ALTERACAO not in F.itens_do_projeto(proj, "imagens")[-1]["prompt"]  # padrão: prompt intacto
+    proj["sem_alteracao"] = True
+    img = F.itens_do_projeto(proj, "imagens")[-1]["prompt"]
+    vid = F.itens_do_projeto(proj, "videos")[0]["prompt"]
+    assert img.startswith("cena com Ana") and img.endswith(F.SEM_ALTERACAO)
+    assert vid.startswith("v") and vid.endswith(F.SEM_ALTERACAO)
+    assert F.SEM_ALTERACAO in F.html_storyboard(proj, tmp_path)  # a pessoa vê o prompt que vai ser usado
+    proj["cenas"][0]["sem_alteracao"] = False  # a cena pode desligar
+    assert F.SEM_ALTERACAO not in F.itens_do_projeto(proj, "imagens")[-1]["prompt"]
+
+
+def test_sem_alteracao_nao_repete_a_frase():
+    proj = _proj_com_personagem(); proj["sem_alteracao"] = True
+    proj["cenas"][0]["prompt_imagem"] += " " + F.SEM_ALTERACAO
+    assert F.itens_do_projeto(proj, "imagens")[-1]["prompt"].count(F.SEM_ALTERACAO) == 1

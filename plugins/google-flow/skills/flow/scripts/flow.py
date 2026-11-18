@@ -1327,6 +1327,27 @@ def _slug(texto):
     return re.sub(r"[^a-z0-9]+", "_", t).strip("_") or "personagem"
 
 
+SEM_ALTERACAO = ("Use only the attached images as reference: keep the character and the setting exactly as they "
+                 "appear in them, with no changes to face, body, clothes, place, colors or logos.")
+
+
+def sem_alteracao(proj, c):
+    """A pessoa quer o mesmo personagem e o mesmo cenário das imagens enviadas, sem mudança: vale para o projeto
+    inteiro ("sem_alteracao": true) ou só para a cena (a cena pode desligar com false)."""
+    return bool(c.get("sem_alteracao", proj.get("sem_alteracao", False)))
+
+
+def prompt_final(proj, c, campo):
+    """O prompt da pessoa, exatamente como está; com "sem_alteracao", acrescenta no fim a frase que pede para
+    usar só as imagens enviadas como referência (se ela já não estiver lá)."""
+    texto = (c.get(campo) or "").rstrip()
+    if texto and sem_alteracao(proj, c) and SEM_ALTERACAO not in texto:
+        texto = f"{texto}
+
+{SEM_ALTERACAO}"
+    return texto
+
+
 def personagens_do_projeto(proj):
     """Personagens (pessoa, animal, mascote, desenho) que aparecem em mais de uma cena. Com "foto" (imagem
     enviada), usa como está; com "prompt_imagem", gera a imagem antes das cenas (personagem_<nome>.jpg), que
@@ -1357,10 +1378,10 @@ def itens_do_projeto(proj, etapa):
         return itens
     for c in resumo_do_projeto(proj)["cenas"]:
         if etapa == "imagens" and c.get("prompt_imagem"):
-            itens.append({"tipo": "imagem", "prompt": c["prompt_imagem"], "saida": c["imagem"],
+            itens.append({"tipo": "imagem", "prompt": prompt_final(proj, c, "prompt_imagem"), "saida": c["imagem"],
                           "referencias": list(c.get("referencias", [])), "formato": fmt})
         elif etapa == "videos" and c.get("prompt_video"):
-            item = {"tipo": "video", "prompt": c["prompt_video"], "saida": c["video"], "segundos": int(c["segundos"]),
+            item = {"tipo": "video", "prompt": prompt_final(proj, c, "prompt_video"), "saida": c["video"], "segundos": int(c["segundos"]),
                     "formato": fmt}
             if c.get("prompt_imagem"):
                 if c.get("imagens_extra"):  # Omni (Elementos) aceita várias imagens: ex. personagem + outro ambiente
@@ -1415,8 +1436,8 @@ def html_storyboard(proj, pasta):
         blocos.append(f"""<section class=cena><div class=quadro>{img}</div><div class=texto>
 <h2>Cena {c['n']} · {e(c.get('descricao'))} <small>{c.get('segundos', 0)} s · {c['creditos']} créditos</small></h2>{fala}
 <p><b>Transição para a próxima:</b> {e(c.get('transicao', '-') if c['n'] < len(r['cenas']) else 'fim do vídeo')}</p>
-<h3>Prompt da imagem</h3><pre>{e(c.get('prompt_imagem'))}</pre>
-<h3>Prompt do vídeo</h3><pre>{e(c.get('prompt_video'))}</pre></div></section>""")
+<h3>Prompt da imagem</h3><pre>{e(prompt_final(proj, c, 'prompt_imagem'))}</pre>
+<h3>Prompt do vídeo</h3><pre>{e(prompt_final(proj, c, 'prompt_video'))}</pre></div></section>""")
     if r["saldo"] is None:
         saldo = ""
     elif r["falta"]:

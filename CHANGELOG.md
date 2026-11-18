@@ -3,6 +3,7 @@
 ## 1.3.4 (18/11/2026)
 - Duração: não há limite para o vídeo final; o recomendado é até 1 minuto. As opções de divisão avisam quando passa disso, sem impedir.
 - Correção no Windows: os comandos quebravam ou mostravam acentos errados no terminal (ex.: `opcoes`); agora a saída é sempre UTF-8.
+- `sem_alteracao`: quando a pessoa quer o mesmo personagem e o mesmo cenário das imagens enviadas, sem mudança, o robô acrescenta ao prompt "use only the attached images as reference…". O storyboard mostra o prompt já com a frase.
 - Storyboard: os personagens ficam num bloco só, acima das cenas, um ao lado do outro, com fundo laranja suave (80%) para diferenciar dos cartões de cena.
 
 ## 1.3.3 (18/11/2026)
