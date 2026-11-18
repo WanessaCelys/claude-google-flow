@@ -1488,15 +1488,16 @@ def html_storyboard(proj, pasta):
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap"><style>
 :root{{--fundo:#f6f5f2;--cartao:#fff;--texto:#1f1d1a;--suave:#6b665e;--linha:#e3dfd7;--destaque:#b4531f}}
 body{{margin:0;background:var(--fundo);color:var(--texto);font:16px/1.55 system-ui,"Segoe UI",sans-serif}}
-main{{max-width:1000px;margin:0 auto;padding:84px 16px 64px}}
-.tarja{{position:fixed;top:0;left:0;right:0;z-index:10;height:52px;background:#f08a3c;display:flex;align-items:center;justify-content:flex-end;padding:0 18px}}
-.assinatura{{color:#000;font:400 28px/1 "Great Vibes","Segoe Script","Brush Script MT",cursive;text-decoration:none}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
+main{{max-width:1000px;margin:0 auto;padding:72px 16px 64px}}
+.tarja{{position:fixed;top:0;left:0;right:0;z-index:10;height:44px;background:#2b2b2b;display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 18px}}
+.insta{{display:flex;opacity:.7}}.insta:hover{{opacity:1}}.insta svg{{width:16px;height:16px}}
+.assinatura{{color:#fff;font:400 20px/1 "Great Vibes","Segoe Script","Brush Script MT",cursive;text-decoration:none}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
 table{{width:100%;border-collapse:collapse;background:var(--cartao);border:1px solid var(--linha)}}
 th,td{{text-align:left;padding:9px 11px;border-bottom:1px solid var(--linha);font-size:14px;vertical-align:top}}
 th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave)}}tr.t td{{font-weight:700}}.num{{white-space:nowrap}}
 .aviso{{margin:18px 0;padding:12px 14px;background:#fff4e5;border-left:4px solid #e8a33d;border-radius:6px}}
 .ok{{margin:18px 0;padding:12px 14px;background:#ecf8ef;border-left:4px solid #2f9e57;border-radius:6px}}
-.regua{{display:flex;gap:2px;margin:6px 0 4px;height:58px}}.regua .seg{{display:flex;flex-direction:column;justify-content:center;padding:0 8px;color:#fff;border-radius:6px;font-size:12px;line-height:1.3;overflow:hidden;white-space:nowrap}}
+.regua{{display:flex;gap:2px;margin:6px 0 4px;height:58px}}.regua .seg{{display:flex;flex-direction:column;justify-content:center;padding:0 8px;color:#431407;border-radius:6px;font-size:12px;line-height:1.3;overflow:hidden;white-space:nowrap}}
 .regua .seg b{{font-size:13px}}.reguaeixo{{display:flex;justify-content:space-between;color:var(--suave);font-size:12px;margin-bottom:6px}}
 .transicoes{{color:var(--suave);font-size:12px;margin:0 0 18px}}.duracao{{font-weight:700;color:var(--texto)}}
 .personagens{{margin-top:20px;padding:16px;border-radius:10px;background:rgba(250,190,140,.8)}}
@@ -1526,13 +1527,20 @@ ASSINATURA = "criado por Wanessa Celys"  # fixa no canto de cima, à direita, em
 INSTAGRAM = ""  # link do Instagram da autora; a assinatura vira link quando preenchido
 
 
-def _assinatura_html(e):
-    texto = e(ASSINATURA)
-    if INSTAGRAM:
-        return f'<a class=assinatura href="{e(INSTAGRAM)}" target="_blank" rel="noopener">{texto}</a>'
-    return f"<div class=assinatura>{texto}</div>"
+ICONE_INSTAGRAM = ('<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" aria-hidden="true">'
+                   '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/>'
+                   '<circle cx="17.5" cy="6.5" r="1" fill="#fff" stroke="none"/></svg>')
 
-CORES_REGUA = ("#9a3412", "#c2410c", "#ea580c", "#b45309", "#d9640f", "#7c2d12")  # só tons de laranja
+
+def _assinatura_html(e):
+    """Assinatura manuscrita, pequena e branca; com INSTAGRAM, um ícone discreto ao lado leva ao perfil."""
+    texto = f"<span class=assinatura>{e(ASSINATURA)}</span>"
+    if not INSTAGRAM:
+        return texto
+    return (f'{texto}<a class=insta href="{e(INSTAGRAM)}" target="_blank" rel="noopener" '
+            f'title="Instagram" aria-label="Instagram">{ICONE_INSTAGRAM}</a>')
+
+CORES_REGUA = ("#fdc89b", "#fbb57a", "#fed9b5", "#f9a868", "#fcc08c", "#ffe2c6")  # só tons suaves de laranja
 
 
 def _regua_html(cenas, e):

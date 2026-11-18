@@ -635,7 +635,7 @@ def test_copia_de_referencia_e_recusada_mas_imagem_nova_nao():
 def test_storyboard_tem_assinatura_fixa(tmp_path):
     pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
     assert "criado por Wanessa Celys" in pagina and "class=assinatura" in pagina
-    assert "position:fixed" in pagina and "color:#000" in pagina and "Great Vibes" in pagina
+    assert "position:fixed" in pagina and "background:#2b2b2b" in pagina and "Great Vibes" in pagina
 
 
 def test_recomenda_ate_um_minuto_sem_limitar():
@@ -679,7 +679,11 @@ def test_bloco_laranja_tem_todas_as_referencias_enviadas(tmp_path):
 def test_assinatura_vira_link_do_instagram(tmp_path, monkeypatch):
     monkeypatch.setattr(F, "INSTAGRAM", "https://www.instagram.com/exemplo")
     pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
-    assert '<a class=assinatura href="https://www.instagram.com/exemplo" target="_blank" rel="noopener">criado por Wanessa Celys</a>' in pagina
+    assert '<span class=assinatura>criado por Wanessa Celys</span><a class=insta href="https://www.instagram.com/exemplo"' in pagina
+    assert "<svg" in pagina
+    sem = F.html_storyboard.__globals__  # sem Instagram, sem ícone
+    monkeypatch.setattr(F, "INSTAGRAM", "")
+    assert "class=insta" not in F.html_storyboard(_proj_com_personagem(), tmp_path)
 
 
 def test_atividade_incomum_manda_parar_e_nao_mudar_o_pedido():
