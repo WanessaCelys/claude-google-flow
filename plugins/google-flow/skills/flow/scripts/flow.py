@@ -1342,9 +1342,7 @@ def prompt_final(proj, c, campo):
     usar só as imagens enviadas como referência (se ela já não estiver lá)."""
     texto = (c.get(campo) or "").rstrip()
     if texto and sem_alteracao(proj, c) and SEM_ALTERACAO not in texto:
-        texto = f"{texto}
-
-{SEM_ALTERACAO}"
+        texto = texto + chr(10) * 2 + SEM_ALTERACAO
     return texto
 
 
