@@ -10,6 +10,10 @@ O storyboard é sempre gerado no modo projeto, mesmo que a pessoa não peça: é
   "formato": "9:16",
   "estilo": "natural (UGC)", "idioma": "pt-BR", "musica": "sem música", "legendas": "sem legendas", "download": "720p",
   "saldo": 36,
+  "personagens": [
+    {"nome": "Ana", "prompt_imagem": "retrato da personagem (o da pessoa)", "referencias": []},
+    {"nome": "Dono da loja", "foto": "ref/dono.jpg"}
+  ],
   "cenas": [
     {
       "descricao": "Gancho: o que acontece, em uma frase",
@@ -25,6 +29,7 @@ O storyboard é sempre gerado no modo projeto, mesmo que a pessoa não peça: é
   ]
 }
 ```
+- `personagens` (opcional): quem aparece em mais de uma cena. Com `foto`, usa a foto real; com `prompt_imagem`, gera `personagem_<nome>.jpg` antes das cenas (0 crédito) e aparece no storyboard como "Personagem", para aprovar o rosto. As cenas usam esse arquivo em `referencias`.
 - As cenas viram `cena01.jpg`/`cena01.mp4`, `cena02…` na ordem. Referências são caminhos dentro da pasta do projeto (fotos reais em `ref/`, imagens de cenas anteriores pelo nome).
 - `transicao` é a passagem **para a próxima** cena: `corte`, `suave`, `esmaecer-preto`, `esmaecer-branco`, `deslizar-esquerda`, `deslizar-direita`, `aproximar` ou `afastar`. A última cena não precisa.
 - `saldo`: o resultado de `flow.py saldo` (com várias contas, a soma das contas que vão pagar).
@@ -33,6 +38,7 @@ O storyboard é sempre gerado no modo projeto, mesmo que a pessoa não peça: é
 - Cena só de imagem: deixe `prompt_video` vazio. Vídeo só com texto: deixe `prompt_imagem` vazio.
 
 ## Comandos
+- `flow.py storyboard projeto.json --itens personagens` → `itens_personagens.json` (só os retratos, para aprovar o rosto primeiro).
 - `flow.py storyboard projeto.json --itens imagens --abrir` → `storyboard.html` + `itens_imagens.json` (etapa das imagens).
 - Depois das imagens, o mesmo comando mostra as imagens na página para a aprovação.
 - `flow.py storyboard projeto.json --itens videos` → `itens_videos.json` (só das imagens aprovadas).

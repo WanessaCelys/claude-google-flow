@@ -581,3 +581,42 @@ def test_falha_nova_tira_nomes_de_icones():
     bruto = "warning Falha Esta geração talvez viole nossas políticas. Não houve cobrança por esta geração. refresh undo delete_forever"
     assert F.falha_nova([], [bruto]) == ("Falha Esta geração talvez viole nossas políticas. "
                                          "Não houve cobrança por esta geração")
+
+
+def _proj_com_personagem():
+    return {"titulo": "t", "formato": "9:16", "saldo": 50,
+            "personagens": [{"nome": "Ana Luíza", "prompt_imagem": "retrato da Ana", "referencias": []},
+                            {"nome": "Dono", "foto": "ref/dono.jpg"}],
+            "cenas": [{"descricao": "a", "segundos": 10, "prompt_imagem": "cena com Ana",
+                       "referencias": ["personagem_ana_luiza.jpg"], "prompt_video": "v"}]}
+
+
+def test_personagem_gerado_vem_antes_das_cenas_e_foto_real_nao_gera():
+    proj = _proj_com_personagem()
+    so_retratos = F.itens_do_projeto(proj, "personagens")
+    assert [i["saida"] for i in so_retratos] == ["personagem_ana_luiza.jpg"]
+    imagens = F.itens_do_projeto(proj, "imagens")
+    assert [i["saida"] for i in imagens] == ["personagem_ana_luiza.jpg", "cena01.jpg"]
+    assert all(i["saida"] != "ref/dono.jpg" for i in imagens)
+    assert [i["saida"] for i in F.itens_do_projeto(proj, "videos")] == ["cena01.mp4"]
+
+
+def test_personagem_sem_foto_nem_prompt_para():
+    proj = _proj_com_personagem()
+    proj["personagens"] = [{"nome": "X"}]
+    with pytest.raises(SystemExit):
+        F.itens_do_projeto(proj, "personagens")
+
+
+def test_storyboard_mostra_personagem_e_pede_retrato_primeiro(tmp_path):
+    pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
+    assert "Personagem · Ana Luíza" in pagina and "Personagem · Dono" in pagina
+    assert "retrato de Ana Luíza" in pagina and "Posso gerar as" not in pagina
+    (tmp_path / "personagem_ana_luiza.jpg").write_bytes(b"x")
+    assert "Posso gerar as 1 imagens" in F.html_storyboard(_proj_com_personagem(), tmp_path)
+
+
+def test_projeto_sem_personagens_continua_igual(tmp_path):
+    proj = _proj_com_personagem(); proj.pop("personagens")
+    assert [i["saida"] for i in F.itens_do_projeto(proj, "imagens")] == ["cena01.jpg"]
+    assert "Personagem ·" not in F.html_storyboard(proj, tmp_path)

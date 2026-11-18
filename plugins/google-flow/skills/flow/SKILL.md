@@ -36,6 +36,16 @@ python flow.py preferencias --formato 9:16 --download 720p
 
 Para mudar depois: o mesmo comando só com o campo que muda. **Quando uma preferência for "depende", pergunte a cada pedido.**
 
+### Fim da configuração (diga sempre, com as respostas dela)
+
+> Tudo pronto: conta conectada e preferências salvas (formato, resolução, contas).
+> Agora é só pedir. Exemplos:
+> - "gera esta imagem: [seu prompt]"
+> - "gera um vídeo de 10 s com esta imagem: [prompt]"
+> - "quero um vídeo de 30 s com estas cenas: [roteiro e prompts]": mostro as opções de divisão e o storyboard antes de gastar.
+>
+> Os prompts são seus: uso exatamente como você mandar. Antes de qualquer geração mostro o custo e espero o seu ok.
+
 ## Antes de cada geração
 
 1. Leia as preferências (`flow.py preferencias`).
@@ -50,13 +60,14 @@ Para mudar depois: o mesmo comando só com o campo que muda. **Quando uma prefer
 Quando o pedido tem várias cenas ou peças (um comercial, uma leva de criativos, uma sequência de fotos), não gere uma por uma. O roteiro, os prompts, as durações e as transições são da pessoa; o trabalho da skill é organizar, mostrar o custo, gerar e juntar. Siga estas etapas, parando para a aprovação dela onde está marcado. O motivo: imagem não gasta crédito e vídeo gasta, então tudo o que puder ser decidido na imagem é decidido antes de qualquer vídeo.
 
 0. **Duração e divisão (antes do storyboard):** quando a pessoa pede um vídeo de X segundos e ainda não disse como dividir, rode `python flow.py opcoes X` (com `--1080p` se ela baixa em 1080p) e mostre as opções: quantos clipes de quantos segundos, a duração final (a mais próxima, quando não fecha exato) e os créditos de cada uma. Ela escolhe; só depois monte o storyboard.
-1. **Organizar o que a pessoa mandou:** cenas, prompts, durações, imagens de referência e transições vão para o `projeto.json`, sem mudar o conteúdo. Faltou algo (duração de uma cena, qual imagem usar), pergunte.
-2. **Storyboard → aprovação (sempre, mesmo que a pessoa não peça):** escreva `<projeto>/projeto.json` (formato em `referencias/storyboard-modelo.md`) e rode `python flow.py storyboard <projeto>/projeto.json --itens imagens --abrir`. Isso cria e abre `storyboard.html` (barra de tempo no topo com os segundos de cada cena, as transições e a duração final; tabela com créditos; aviso de saldo; cada cena com fala, prompts e transição) e o `itens_imagens.json` do lote. Mostre também o resumo na conversa e espere o ok. A aprovação e os pedidos de mudança são na conversa: para trocar um prompt, uma duração ou uma transição, altere o `projeto.json` e gere o storyboard de novo.
-3. **Imagens em lote:** `python flow.py lote <projeto>/itens_imagens.json`. A cena em que a pessoa aparece melhor vem primeiro e serve de referência para as outras.
-4. **Aprovação das imagens:** rode o `storyboard` de novo (agora com as imagens aparecendo na página), confira mãos, rosto, objetos e texto e pergunte. Refaça só as reprovadas (apague o arquivo e rode o lote de novo: ele pula as que já existem).
-5. **Vídeos em lote:** `python flow.py storyboard <projeto>/projeto.json --itens videos` e `python flow.py lote <projeto>/itens_videos.json --confirmo --max <total aprovado>`, só depois de mostrar de novo o custo dos vídeos e receber o ok.
-6. **Juntar:** una os clipes na ordem do roteiro com as transições do storyboard (`flow.py juntar`, veja abaixo). Não gasta crédito.
-7. **Entrega:** a pasta do projeto com os arquivos numerados, o vídeo final, o `projeto.json` (todos os prompts, para refazer ou ajustar) e o `storyboard.html`.
+1. **Referências e personagens (pergunte se ela não disse):** "Tem imagens de referência (lugar, produto, logo)? Tem uma pessoa ou personagem que aparece em mais de uma cena? Você tem foto dela, ou crio um retrato primeiro?" Com foto real, ela entra em `personagens` com `"foto"`. Sem foto, entra com `"prompt_imagem"` (o da pessoa, ou escrito pelo Claude se ela pedir) e o robô gera um **retrato** antes das cenas. O motivo: sem um rosto definido, a primeira cena inventa um rosto e cada cena copia a anterior, e o rosto vai mudando aos poucos; com o retrato aprovado, todas copiam da mesma fonte. Nas cenas em que a personagem aparece, ponha a imagem dela (`personagem_<nome>.jpg` ou a foto) em `referencias` e, no vídeo, em `imagens_extra` quando a imagem da cena não mostrar o rosto.
+2. **Organizar o que a pessoa mandou:** cenas, prompts, durações, imagens de referência e transições vão para o `projeto.json`, sem mudar o conteúdo. Faltou algo (duração de uma cena, qual imagem usar), pergunte.
+3. **Storyboard → aprovação (sempre, mesmo que a pessoa não peça):** escreva `<projeto>/projeto.json` (formato em `referencias/storyboard-modelo.md`) e rode `python flow.py storyboard <projeto>/projeto.json --itens imagens --abrir`. Isso cria e abre `storyboard.html` (barra de tempo no topo com os segundos de cada cena, as transições e a duração final; tabela com créditos; aviso de saldo; cada cena com fala, prompts e transição) e o `itens_imagens.json` do lote. Mostre também o resumo na conversa e espere o ok. A aprovação e os pedidos de mudança são na conversa: para trocar um prompt, uma duração ou uma transição, altere o `projeto.json` e gere o storyboard de novo.
+4. **Imagens em lote:** se há retrato a gerar, primeiro só ele: `python flow.py storyboard <projeto>/projeto.json --itens personagens` e `python flow.py lote <projeto>/itens_personagens.json`; mostre o retrato e espere o ok do rosto. Depois as cenas: `python flow.py lote <projeto>/itens_imagens.json` (pula o que já existe). Sem personagem definida, a cena em que a pessoa aparece melhor vem primeiro e serve de referência para as outras.
+5. **Aprovação das imagens:** rode o `storyboard` de novo (agora com as imagens aparecendo na página), confira mãos, rosto, objetos e texto e pergunte. Refaça só as reprovadas (apague o arquivo e rode o lote de novo: ele pula as que já existem).
+6. **Vídeos em lote:** `python flow.py storyboard <projeto>/projeto.json --itens videos` e `python flow.py lote <projeto>/itens_videos.json --confirmo --max <total aprovado>`, só depois de mostrar de novo o custo dos vídeos e receber o ok.
+7. **Juntar:** una os clipes na ordem do roteiro com as transições do storyboard (`flow.py juntar`, veja abaixo). Não gasta crédito.
+8. **Entrega:** a pasta do projeto com os arquivos numerados, o vídeo final, o `projeto.json` (todos os prompts, para refazer ou ajustar) e o `storyboard.html`.
 
 Narração em off, legenda e motion design não fazem parte desta skill.
 

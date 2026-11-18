@@ -1280,10 +1280,39 @@ def resumo_do_projeto(proj):
     return {"cenas": cenas, "total": total, "duracao": duracao, "saldo": saldo, "falta": falta}
 
 
+def _slug(texto):
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(texto)).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "_", t).strip("_") or "personagem"
+
+
+def personagens_do_projeto(proj):
+    """Personagens que aparecem em mais de uma cena. Com "foto" (foto real da pessoa), usa a foto; com
+    "prompt_imagem", gera um retrato antes das cenas (personagem_<nome>.jpg), que vira a referência delas."""
+    lista = []
+    for p in proj.get("personagens", []):
+        gerar = not p.get("foto")
+        lista.append({**p, "gerar": gerar,
+                      "imagem": f"personagem_{_slug(p.get('nome'))}.jpg" if gerar else p["foto"]})
+    return lista
+
+
 def itens_do_projeto(proj, etapa):
-    """Itens do lote de uma etapa: "imagens" (0 crédito) ou "videos" (só depois das imagens aprovadas)."""
+    """Itens do lote de uma etapa: "personagens" (só os retratos, para aprovar o rosto antes), "imagens"
+    (retratos que faltam + cenas, 0 crédito) ou "videos" (só depois das imagens aprovadas)."""
+    if etapa not in ("personagens", "imagens", "videos"):
+        sys.exit("Etapa: personagens, imagens ou videos.")
     fmt = proj.get("formato", "9:16")
     itens = []
+    if etapa in ("personagens", "imagens"):
+        for p in personagens_do_projeto(proj):
+            if p["gerar"]:
+                if not p.get("prompt_imagem"):
+                    sys.exit(f"Personagem {p.get('nome')}: falta \"foto\" ou \"prompt_imagem\".")
+                itens.append({"tipo": "imagem", "prompt": p["prompt_imagem"], "saida": p["imagem"],
+                              "referencias": list(p.get("referencias", [])), "formato": fmt})
+    if etapa == "personagens":
+        return itens
     for c in resumo_do_projeto(proj)["cenas"]:
         if etapa == "imagens" and c.get("prompt_imagem"):
             itens.append({"tipo": "imagem", "prompt": c["prompt_imagem"], "saida": c["imagem"],
@@ -1301,8 +1330,6 @@ def itens_do_projeto(proj, etapa):
             if c.get("max") is not None:
                 item["max"] = int(c["max"])
             itens.append(item)
-    if etapa not in ("imagens", "videos"):
-        sys.exit("Etapa: imagens ou videos.")
     return itens
 
 
@@ -1321,6 +1348,16 @@ def html_storyboard(proj, pasta):
         f"<td>{e(c.get('transicao', '') if c['n'] < len(r['cenas']) else 'fim')}</td>"
         f"<td class=num>0 + {c['creditos']}</td></tr>" for c in r["cenas"])
     blocos = []
+    pers = personagens_do_projeto(proj)
+    falta_retrato = [p for p in pers if p["gerar"] and not (pasta / p["imagem"]).exists()]
+    for p in pers:
+        img = (f'<img src="{e(p["imagem"])}" alt="{e(p.get("nome"))}">' if (pasta / p["imagem"]).exists()
+               else '<div class=vazio>retrato ainda não gerado</div>')
+        origem = ("<p>Foto real enviada: usada como está.</p>" if not p["gerar"]
+                  else f"<h3>Prompt do retrato</h3><pre>{e(p.get('prompt_imagem'))}</pre>")
+        blocos.append(f"""<section class="cena personagem"><div class=quadro>{img}</div><div class=texto>
+<h2>Personagem · {e(p.get('nome'))} <small>{e(p['imagem'])} · 0 créditos</small></h2>
+<p>Referência do rosto e da roupa em todas as cenas em que aparece.</p>{origem}</div></section>""")
     for c in r["cenas"]:
         img = (f'<img src="{e(c["imagem"])}" alt="cena {c["n"]}">' if (pasta / c["imagem"]).exists()
                else '<div class=vazio>imagem ainda não gerada</div>')
@@ -1343,7 +1380,10 @@ def html_storyboard(proj, pasta):
     else:
         saldo = f"<div class=ok><b>Saldo: {r['saldo']} créditos → sobram {r['saldo'] - r['total']}.</b></div>"
     n_img = len(r["cenas"])
-    pergunta = (f"Aprova as {n_img} imagens? Se sim, os vídeos custam {r['total']} créditos (mostro de novo antes de gerar)."
+    if falta_retrato:
+        nomes = ", ".join(str(p.get("nome")) for p in falta_retrato)
+        pergunta_retrato = f"Posso gerar primeiro o retrato de {nomes} (0 créditos), para você aprovar o rosto antes das cenas?"
+    pergunta = pergunta_retrato if falta_retrato else (f"Aprova as {n_img} imagens? Se sim, os vídeos custam {r['total']} créditos (mostro de novo antes de gerar)."
                 if tem_imagens else f"Posso gerar as {n_img} imagens (0 créditos)?")
     prefs = " · ".join(e(proj.get(k)) for k in ("estilo", "idioma", "musica", "legendas") if proj.get(k))
     regua = _regua_html(r["cenas"], e)
@@ -1360,7 +1400,7 @@ th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave
 .regua{{display:flex;gap:2px;margin:6px 0 4px;height:58px}}.regua .seg{{display:flex;flex-direction:column;justify-content:center;padding:0 8px;color:#fff;border-radius:6px;font-size:12px;line-height:1.3;overflow:hidden;white-space:nowrap}}
 .regua .seg b{{font-size:13px}}.reguaeixo{{display:flex;justify-content:space-between;color:var(--suave);font-size:12px;margin-bottom:6px}}
 .transicoes{{color:var(--suave);font-size:12px;margin:0 0 18px}}.duracao{{font-weight:700;color:var(--texto)}}
-.cena{{display:flex;gap:20px;background:var(--cartao);border:1px solid var(--linha);border-radius:10px;padding:16px;margin-top:20px}}
+.personagem{{border-color:var(--destaque)}}.cena{{display:flex;gap:20px;background:var(--cartao);border:1px solid var(--linha);border-radius:10px;padding:16px;margin-top:20px}}
 .quadro{{flex:0 0 220px}}.quadro img{{width:220px;border-radius:8px;display:block}}
 .vazio{{width:220px;aspect-ratio:9/16;border:2px dashed var(--linha);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--suave);font-size:13px;text-align:center}}
 .refs{{font-size:12px;text-transform:uppercase;color:var(--suave);margin:10px 0 4px}}
@@ -1564,7 +1604,7 @@ def _argumentos(argv):
     s.add_argument("--dias", type=int)
     s = sub.add_parser("storyboard")
     s.add_argument("projeto")
-    s.add_argument("--itens", choices=("imagens", "videos"))
+    s.add_argument("--itens", choices=("personagens", "imagens", "videos"))
     s.add_argument("--abrir", action="store_true")
     s = sub.add_parser("juntar")
     s.add_argument("entradas", nargs="+")
