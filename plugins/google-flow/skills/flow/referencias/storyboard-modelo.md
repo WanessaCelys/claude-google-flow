@@ -26,7 +26,7 @@ O storyboard é sempre gerado no modo projeto, mesmo que a pessoa não peça: é
 }
 ```
 - As cenas viram `cena01.jpg`/`cena01.mp4`, `cena02…` na ordem. Referências são caminhos dentro da pasta do projeto (fotos reais em `ref/`, imagens de cenas anteriores pelo nome).
-- `transicao` é a passagem **para a próxima** cena: `corte`, `suave`, `deslizar`, `circulo` ou `zoom`. A última cena não precisa.
+- `transicao` é a passagem **para a próxima** cena: `corte`, `suave`, `esmaecer-preto`, `esmaecer-branco`, `deslizar-esquerda`, `deslizar-direita`, `aproximar` ou `afastar`. A última cena não precisa.
 - `saldo`: o resultado de `flow.py saldo` (com várias contas, a soma das contas que vão pagar).
 - `segundos`: a duração que a pessoa escolheu (para informação: 10 s é o mais barato por segundo). `imagens_extra`: imagens a mais para o vídeo (ex.: o segundo ambiente que o clipe atravessa).
 - `baixar: "1080p"` só se a pessoa pediu (+5 créditos); `max` só para duração fora da tabela.

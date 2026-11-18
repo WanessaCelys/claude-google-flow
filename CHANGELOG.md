@@ -1,5 +1,8 @@
 # Histórico de versões
 
+## 1.3.1 (18/11/2026)
+- Transições clássicas no `juntar`: suave, esmaecer-preto, esmaecer-branco, deslizar-esquerda, deslizar-direita, aproximar e afastar (este feito sob medida: a cena encolhe até o centro e revela a próxima). Os nomes antigos (deslizar, zoom, círculo) continuam aceitos.
+
 ## 1.3.0 (18/11/2026)
 
 **Foco:** a skill é a ferramenta; quem decide os prompts, a duração, o estilo e o formato é a pessoa. Os prompts chegam prontos (escritos por ela ou criados com o Claude na conversa) e são usados como estão.

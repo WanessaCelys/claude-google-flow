@@ -539,3 +539,31 @@ def test_storyboard_tem_regua_de_tempo(tmp_path):
     html = F.html_storyboard(proj, tmp_path)
     assert 'class="regua"' in html and "0–10 s" in html and "10–18 s" in html and "18–24 s" in html
     assert "Duração final: 23,6 s" in html          # 24 s menos 0,4 s da transição suave
+
+
+def test_transicoes_classicas():
+    for nome, efeito in [("esmaecer-preto", "fadeblack"), ("esmaecer-branco", "fadewhite"), ("deslizar-esquerda", "slideleft"),
+                         ("deslizar-direita", "slideright"), ("aproximar", "zoomin")]:
+        cmd = F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4"], "f.mp4", duracoes=[8, 8], com_audio=[True, True], transicao=nome)
+        assert f"xfade=transition={efeito}:" in cmd[cmd.index("-filter_complex") + 1]
+    cmd = F.comando_juntar("ffmpeg", ["a.mp4", "b.mp4"], "f.mp4", duracoes=[8, 8], com_audio=[True, True], transicao="afastar")
+    filtro = cmd[cmd.index("-filter_complex") + 1]
+    assert "xfade=transition=custom" in filtro and "st(" not in filtro  # sem variáveis compartilhadas (dava chuvisco)
+
+
+def test_juntar_de_verdade_com_afastar_e_esmaecer(tmp_path):
+    import subprocess
+    try:
+        ff = F.achar_ffmpeg()
+    except SystemExit:
+        pytest.skip("ffmpeg não instalado")
+    clipes = []
+    for i, cor in enumerate(("red", "green", "blue")):
+        c = tmp_path / f"c{i}.mp4"
+        subprocess.run([ff, "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c={cor}:s=360x640:d=1.5:r=24",
+                        "-f", "lavfi", "-i", "sine=frequency=440:duration=1.5", "-shortest", "-c:v", "libx264",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", str(c)], check=True)
+        clipes.append(str(c))
+    final = tmp_path / "final.mp4"
+    F.juntar(clipes, str(final), transicao="afastar,esmaecer-preto", formato="9:16")
+    assert final.exists() and final.stat().st_size > 1000

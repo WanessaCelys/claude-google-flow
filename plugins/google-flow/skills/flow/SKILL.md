@@ -68,7 +68,7 @@ Une os clipes num vídeo só, no computador da pessoa (não usa o Flow). Todos f
 python flow.py juntar cena01.mp4 cena02.mp4 cena03.mp4 --saida final.mp4 [--transicao corte] [--musica fundo.mp3] [--volume-musica 0.15] [--formato 9:16]
 ```
 - **Trecho de um clipe:** `cena01.mp4@0-6` usa só do segundo 0 ao 6 (aproveite a parte boa de um clipe em vez de gerar de novo).
-- **Transições:** `corte` (corte seco, padrão, ritmo de anúncio), `suave`, `deslizar`, `circulo` ou `zoom` (0,4 s cada). Uma para todas (`--transicao suave`) ou uma por junção, na ordem: `--transicao corte,deslizar,corte,suave` (são N−1 junções para N vídeos). No modo projeto, use as transições do storyboard.
+- **Transições (clássicas, 0,4 s cada):** `corte` (corte seco, padrão), `suave` (uma cena se dissolve na outra), `esmaecer-preto`, `esmaecer-branco`, `deslizar-esquerda`, `deslizar-direita`, `aproximar` e `afastar`. Uma para todas (`--transicao esmaecer-preto`) ou uma por junção, na ordem: `--transicao corte,deslizar-esquerda,corte,esmaecer-branco` (são N−1 junções para N vídeos). No modo projeto, use as transições do storyboard.
 - **Música:** só se a pessoa mandar o arquivo; entra em loop, baixa (15%), por baixo das falas. Lembre que a música precisa ter licença para uso comercial se o vídeo for para cliente ou anúncio.
 - Precisa do ffmpeg: se faltar, instale com `pip install imageio-ffmpeg` (não precisa de mais nada).
 - Não sobrescreve: se o arquivo final já existe, escolha outro nome.

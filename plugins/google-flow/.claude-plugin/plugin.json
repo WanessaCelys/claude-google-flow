@@ -1,6 +1,6 @@
 {
   "name": "google-flow",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Gera imagens (Nano Banana) e vídeos (Omni) no Google Flow pelo seu próprio Chrome gastando poucos tokens: lote, storyboard com barra de tempo e custo, opções de duração, junção dos vídeos e registro dos créditos gastos e restantes. Você decide os prompts, a duração, o estilo e o formato; mostra o custo antes de gerar.",
   "author": {
     "name": "Wanessa Celys"

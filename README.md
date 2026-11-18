@@ -29,7 +29,7 @@ Uma ferramenta para gerar no Google Flow **gastando poucos tokens e com os gasto
 - **Imagens e vídeos no Flow** com um comando por geração, sem o Claude ficar clicando na tela passo a passo, uma a uma ou em lote.
 - **Opções de duração:** pediu um vídeo de 30 s? Mostra os jeitos de dividir (ex.: 3 vídeos de 10 s = 45 créditos; 3 de 8 s + 1 de 6 s = 46) para você escolher.
 - **Storyboard visual:** em projetos com várias cenas, abre uma página com uma barra de tempo (segundos de cada cena, transições, duração final), os prompts, as imagens e o custo de cada uma, para você aprovar antes de gastar.
-- **Juntar os vídeos:** une as cenas num vídeo só, com corte seco ou transições (suave, deslizar, círculo, zoom) em cada junção, aproveitando só o trecho bom de um clipe se precisar, e música de fundo opcional. Roda no seu computador, sem crédito.
+- **Juntar os vídeos:** une as cenas num vídeo só, com corte seco ou transições clássicas (suave, esmaecer para o preto ou o branco, deslizar para a esquerda ou a direita, aproximar, afastar) em cada junção, aproveitando só o trecho bom de um clipe se precisar, e música de fundo opcional. Roda no seu computador, sem crédito.
 - **Gastos e créditos:** mostra o custo antes de cada geração, diz quanto sobrou depois e guarda um registro de tudo o que foi gerado (`gastos`), por tipo e por conta.
 - **Vídeos em 720p** (o tamanho original do Flow) e, se você quiser, **download em 1080p** (+5 créditos).
 - **Receitas de prompt de imagem** (opcionais) para quando você pedir que o Claude escreva: foto natural de celular, institucional e produto.

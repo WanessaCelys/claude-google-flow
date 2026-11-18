@@ -1005,7 +1005,24 @@ def ampliar(midia, saida, confirmo, maximo=None):
 TAMANHOS = {"9:16": (720, 1280), "16:9": (1280, 720), "1:1": (720, 720)}
 TRANSICAO_S = 0.4
 # nome em português -> efeito do ffmpeg (xfade); "corte" é corte seco
-TRANSICOES = {"corte": None, "suave": "fade", "deslizar": "slideleft", "circulo": "circleopen", "zoom": "zoomin"}
+TRANSICOES = {
+    "corte": None,
+    "suave": "fade",
+    "esmaecer-preto": "fadeblack",
+    "esmaecer-branco": "fadewhite",
+    "deslizar-esquerda": "slideleft",
+    "deslizar-direita": "slideright",
+    "aproximar": "zoomin",
+    "afastar": "custom",  # o ffmpeg não tem: a cena A encolhe até o centro e revela a B (EXPR_AFASTAR)
+    # nomes antigos (v1.2), aceitos para projetos já salvos
+    "deslizar": "slideleft", "zoom": "zoomin", "circulo": "circleopen",
+}
+_SX = "floor((X-W/2)/max(P,0.001)+W/2)"
+_SY = "floor((Y-H/2)/max(P,0.001)+H/2)"
+# Sem st()/ld(): o xfade roda em várias partes ao mesmo tempo e essas variáveis se misturam (dava chuvisco).
+EXPR_AFASTAR = (f"if(between({_SX},0,W-1)*between({_SY},0,H-1),"
+                f"if(eq(PLANE,0),a0({_SX},{_SY}),if(eq(PLANE,1),a1({_SX},{_SY}),a2({_SX},{_SY}))),"
+                "if(eq(PLANE,0),b0(X,Y),if(eq(PLANE,1),b1(X,Y),b2(X,Y))))")
 
 
 def ler_trecho(entrada):
@@ -1028,7 +1045,8 @@ def lista_de_transicoes(transicao, n):
         sys.exit(f"São {n} vídeos, então são {n - 1} junções: informe {n - 1} transições (ou uma só para todas).")
     for t in transicao:
         if t not in TRANSICOES:
-            sys.exit(f"Transição '{t}' não existe. Use: {', '.join(TRANSICOES)}.")
+            validas = [k for k in TRANSICOES if k not in ("deslizar", "zoom", "circulo")]
+            sys.exit(f"Transição '{t}' não existe. Use: {', '.join(validas)}.")
     return transicao
 
 
@@ -1100,7 +1118,8 @@ def comando_juntar(ffmpeg, entradas, saida, duracoes, com_audio, transicao="cort
                 partes.append(f"[c{i}]settb=1/30{vo}")  # o concat muda a base de tempo; o xfade exige 1/30 dos dois lados
                 acumulado += duracoes[i]
             else:
-                partes.append(f"{v}[v{i}]xfade=transition={efeito}:duration={TRANSICAO_S}:"
+                tipo = f"custom:expr='{EXPR_AFASTAR}'" if efeito == "custom" else efeito
+                partes.append(f"{v}[v{i}]xfade=transition={tipo}:duration={TRANSICAO_S}:"
                               f"offset={round(acumulado - TRANSICAO_S, 3):g}{vo}")
                 partes.append(f"{a}[a{i}]acrossfade=d={TRANSICAO_S}{ao}")
                 acumulado += duracoes[i] - TRANSICAO_S
@@ -1500,7 +1519,8 @@ def _argumentos(argv):
     s.add_argument("entradas", nargs="+")
     s.add_argument("--saida", required=True)
     s.add_argument("--transicao", default="corte",
-                   help="uma para todas (corte, suave, deslizar, circulo, zoom) ou uma por junção: corte,deslizar,suave")
+                   help="uma para todas ou uma por junção (corte,esmaecer-preto,...): corte, suave, esmaecer-preto, "
+                        "esmaecer-branco, deslizar-esquerda, deslizar-direita, aproximar, afastar")
     s.add_argument("--musica")
     s.add_argument("--volume-musica", type=float, default=0.15)
     s.add_argument("--formato")
