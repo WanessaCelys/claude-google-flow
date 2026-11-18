@@ -1488,8 +1488,9 @@ def html_storyboard(proj, pasta):
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap"><style>
 :root{{--fundo:#f6f5f2;--cartao:#fff;--texto:#1f1d1a;--suave:#6b665e;--linha:#e3dfd7;--destaque:#b4531f}}
 body{{margin:0;background:var(--fundo);color:var(--texto);font:16px/1.55 system-ui,"Segoe UI",sans-serif}}
-main{{max-width:1000px;margin:0 auto;padding:56px 16px 64px}}
-.assinatura{{position:fixed;top:10px;right:16px;z-index:10;color:#000;font:400 26px/1.1 "Great Vibes","Segoe Script","Brush Script MT",cursive;background:rgba(255,255,255,.85);padding:2px 14px 4px;border-radius:999px;text-decoration:none}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
+main{{max-width:1000px;margin:0 auto;padding:84px 16px 64px}}
+.tarja{{position:fixed;top:0;left:0;right:0;z-index:10;height:52px;background:#f08a3c;display:flex;align-items:center;justify-content:flex-end;padding:0 18px}}
+.assinatura{{color:#000;font:400 28px/1 "Great Vibes","Segoe Script","Brush Script MT",cursive;text-decoration:none}}h1{{font-size:24px;margin:0 0 4px}}.sub{{color:var(--suave);margin:0 0 20px}}
 table{{width:100%;border-collapse:collapse;background:var(--cartao);border:1px solid var(--linha)}}
 th,td{{text-align:left;padding:9px 11px;border-bottom:1px solid var(--linha);font-size:14px;vertical-align:top}}
 th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave)}}tr.t td{{font-weight:700}}.num{{white-space:nowrap}}
@@ -1512,7 +1513,7 @@ h3{{font-size:12px;text-transform:uppercase;color:var(--suave);margin:12px 0 4px
 pre{{background:#f1efea;border:1px solid var(--linha);border-radius:8px;padding:10px;white-space:pre-wrap;font:12.5px/1.5 Consolas,monospace;margin:0}}
 .pergunta{{margin-top:28px;padding:16px;border:2px solid var(--destaque);border-radius:10px;font-weight:600;background:var(--cartao)}}
 @media(max-width:700px){{.cena{{flex-direction:column}}th:nth-child(4),td:nth-child(4){{display:none}}}}
-</style></head><body>{_assinatura_html(e)}<main>
+</style></head><body><header class=tarja>{_assinatura_html(e)}</header><main>
 <h1>Storyboard: {e(proj.get('titulo'))}</h1>
 <p class=sub>{e(proj.get('formato', '9:16'))} · {r['duracao']} s · {prefs} · download em {e(proj.get('download', '720p'))}</p>
 {regua}
@@ -1531,7 +1532,7 @@ def _assinatura_html(e):
         return f'<a class=assinatura href="{e(INSTAGRAM)}" target="_blank" rel="noopener">{texto}</a>'
     return f"<div class=assinatura>{texto}</div>"
 
-CORES_REGUA = ("#b4531f", "#2f6f9f", "#5d8a3a", "#8a4fa0", "#c08a1e", "#3d7d7a")
+CORES_REGUA = ("#9a3412", "#c2410c", "#ea580c", "#b45309", "#d9640f", "#7c2d12")  # só tons de laranja
 
 
 def _regua_html(cenas, e):

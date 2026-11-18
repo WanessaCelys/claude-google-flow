@@ -686,3 +686,11 @@ def test_atividade_incomum_manda_parar_e_nao_mudar_o_pedido():
     m = F.mensagem_de_falha("Falha Notamos uma atividade incomum. As extensões do navegador podem causar problemas")
     assert "Pare de usar o robô" in m and "Mude o pedido" not in m
     assert "Mude o pedido" in F.mensagem_de_falha("Falha Esta geração talvez viole nossas políticas")
+
+
+def test_regua_so_em_tons_de_laranja_e_tarja_com_assinatura(tmp_path):
+    for cor in F.CORES_REGUA:
+        r, g, b = (int(cor[i:i + 2], 16) for i in (1, 3, 5))
+        assert r > g > b, cor  # laranja: vermelho > verde > azul
+    pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
+    assert "<header class=tarja>" in pagina and "position:fixed;top:0" in pagina
