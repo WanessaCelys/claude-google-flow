@@ -610,7 +610,8 @@ def test_personagem_sem_foto_nem_prompt_para():
 
 def test_storyboard_mostra_personagem_e_pede_retrato_primeiro(tmp_path):
     pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
-    assert "Personagem · Ana Luíza" in pagina and "Personagem · Dono" in pagina
+    assert "<section class=personagens>" in pagina and pagina.count("<article class=personagem>") == 2
+    assert "Ana Luíza" in pagina and "Dono" in pagina and "rgba(240,128,40,.8)" in pagina
     assert "imagem de Ana Luíza" in pagina and "Posso gerar as" not in pagina
     (tmp_path / "personagem_ana_luiza.jpg").write_bytes(b"x")
     assert "Posso gerar as 1 imagens" in F.html_storyboard(_proj_com_personagem(), tmp_path)
@@ -619,7 +620,7 @@ def test_storyboard_mostra_personagem_e_pede_retrato_primeiro(tmp_path):
 def test_projeto_sem_personagens_continua_igual(tmp_path):
     proj = _proj_com_personagem(); proj.pop("personagens")
     assert [i["saida"] for i in F.itens_do_projeto(proj, "imagens")] == ["cena01.jpg"]
-    assert "Personagem ·" not in F.html_storyboard(proj, tmp_path)
+    assert "<section class=personagens>" not in F.html_storyboard(proj, tmp_path)
 
 
 def test_copia_de_referencia_e_recusada_mas_imagem_nova_nao():
@@ -633,3 +634,10 @@ def test_storyboard_tem_assinatura_fixa(tmp_path):
     pagina = F.html_storyboard(_proj_com_personagem(), tmp_path)
     assert '<div class=assinatura>criado por Wanessa Celys</div>' in pagina
     assert "position:fixed" in pagina and "color:#000" in pagina
+
+
+def test_recomenda_ate_um_minuto_sem_limitar():
+    assert "recomendado é até 60 s" not in F.texto_opcoes(60)
+    longo = F.texto_opcoes(90)
+    assert "Não há limite" in longo and "até 60 s" in longo
+    assert F.opcoes_de_duracao(180)  # vídeo longo continua tendo opções

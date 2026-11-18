@@ -1249,6 +1249,9 @@ def juntar(entradas, saida, transicao="corte", musica=None, volume_musica=0.15, 
 
 # ---------- opções de duração e custo para um vídeo de X segundos (a pessoa escolhe antes do storyboard) ----------
 
+DURACAO_RECOMENDADA = 60  # sem limite; recomendação: vídeo final de até 1 minuto
+
+
 def opcoes_de_duracao(total, folga=2):
     """Jeitos de dividir `total` segundos em clipes que o Flow gera, com o custo de cada jeito. Uma opção por
     quantidade de clipes (a mais barata). Se der para fechar o total exato, só mostra as exatas; senão, as mais
@@ -1285,6 +1288,9 @@ def texto_opcoes(total, com_1080p=False):
         aviso = "" if o["total"] == total else f" · fica com {o['total']} s"
         linhas.append(f"  {i}. {partes} = {o['total']} s → {o['creditos']} créditos{extra}{aviso}")
     linhas.append("10 s é o mais barato por segundo; mais clipes curtos = mais cortes e mais custo.")
+    if total > DURACAO_RECOMENDADA:
+        linhas.append(f"Não há limite de duração, mas o recomendado é até {DURACAO_RECOMENDADA} s (1 minuto): "
+                      "mais longo custa mais e prende menos a atenção.")
     return "\n".join(linhas)
 
 
@@ -1386,14 +1392,17 @@ def html_storyboard(proj, pasta):
     blocos = []
     pers = personagens_do_projeto(proj)
     falta_retrato = [p for p in pers if p["gerar"] and not (pasta / p["imagem"]).exists()]
+    cartoes = []
     for p in pers:
         img = (f'<img src="{e(p["imagem"])}" alt="{e(p.get("nome"))}">' if (pasta / p["imagem"]).exists()
-               else '<div class=vazio>imagem do personagem ainda não gerada</div>')
+               else '<div class=vazio>imagem ainda não gerada</div>')
         origem = ("<p>Imagem enviada: usada como está.</p>" if not p["gerar"]
-                  else f"<h3>Prompt da imagem do personagem</h3><pre>{e(p.get('prompt_imagem'))}</pre>")
-        blocos.append(f"""<section class="cena personagem"><div class=quadro>{img}</div><div class=texto>
-<h2>Personagem · {e(p.get('nome'))} <small>{e(p['imagem'])} · 0 créditos</small></h2>
-<p>Referência da aparência em todas as cenas em que aparece.</p>{origem}</div></section>""")
+                  else f"<h3>Prompt da imagem</h3><pre>{e(p.get('prompt_imagem'))}</pre>")
+        cartoes.append(f"""<article class=personagem>{img}<h2>{e(p.get('nome'))}</h2>
+<small>{e(p['imagem'])} · 0 créditos</small>{origem}</article>""")
+    if cartoes:  # num bloco só, no topo, um ao lado do outro, com fundo diferente das cenas
+        blocos.append('<section class=personagens><p class=rotulo>Personagens · referência da aparência '
+                      f'em todas as cenas</p><div class=linha>{"".join(cartoes)}</div></section>')
     for c in r["cenas"]:
         img = (f'<img src="{e(c["imagem"])}" alt="cena {c["n"]}">' if (pasta / c["imagem"]).exists()
                else '<div class=vazio>imagem ainda não gerada</div>')
@@ -1437,7 +1446,10 @@ th{{background:#efece6;font-size:12px;text-transform:uppercase;color:var(--suave
 .regua{{display:flex;gap:2px;margin:6px 0 4px;height:58px}}.regua .seg{{display:flex;flex-direction:column;justify-content:center;padding:0 8px;color:#fff;border-radius:6px;font-size:12px;line-height:1.3;overflow:hidden;white-space:nowrap}}
 .regua .seg b{{font-size:13px}}.reguaeixo{{display:flex;justify-content:space-between;color:var(--suave);font-size:12px;margin-bottom:6px}}
 .transicoes{{color:var(--suave);font-size:12px;margin:0 0 18px}}.duracao{{font-weight:700;color:var(--texto)}}
-.personagem{{border-color:var(--destaque)}}.cena{{display:flex;gap:20px;background:var(--cartao);border:1px solid var(--linha);border-radius:10px;padding:16px;margin-top:20px}}
+.personagens{{margin-top:20px;padding:16px;border-radius:10px;background:rgba(240,128,40,.8)}}
+.personagens .rotulo{{margin:0 0 10px;font-weight:700;color:#1f1d1a}}.personagens .linha{{display:flex;flex-wrap:wrap;gap:12px}}
+.personagem{{flex:0 1 220px;background:var(--cartao);border-radius:8px;padding:10px}}.personagem img,.personagem .vazio{{width:100%;border-radius:6px;display:block}}
+.personagem h2{{font-size:16px;margin:8px 0 0}}.personagem small{{color:var(--suave);font-size:12px}}.personagem pre{{font-size:11.5px}}.cena{{display:flex;gap:20px;background:var(--cartao);border:1px solid var(--linha);border-radius:10px;padding:16px;margin-top:20px}}
 .quadro{{flex:0 0 220px}}.quadro img{{width:220px;border-radius:8px;display:block}}
 .vazio{{width:220px;aspect-ratio:9/16;border:2px dashed var(--linha);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--suave);font-size:13px;text-align:center}}
 .refs{{font-size:12px;text-transform:uppercase;color:var(--suave);margin:10px 0 4px}}
@@ -1669,7 +1681,17 @@ def _argumentos(argv):
     return ap.parse_args(argv)
 
 
+def _saida_utf8():
+    """No Windows o terminal usa cp1252: acentos saem errados e "→" quebra o comando. Força UTF-8."""
+    for fluxo in (sys.stdout, sys.stderr):
+        try:
+            fluxo.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def main(argv=None):
+    _saida_utf8()
     a = _argumentos(sys.argv[1:] if argv is None else argv)
     if a.cmd == "verificar":
         verificar()
